@@ -9,6 +9,55 @@
         <a href="{{ url_for('nova_compra') }}"><button>+ Novo Pedido</button></a>
     </div>
 
+    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 20px;">
+        <form action="{{ url_for('dashboard') }}" method="GET" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; align-items: end;">
+            
+            <div>
+                <label style="font-size: 0.9em; color: #555; font-weight: bold;">Comprador:</label>
+                <select name="f_comprador" style="margin: 0; width: 100%;">
+                    <option value="">Todos</option>
+                    {% for c in lista_compradores %}
+                        <option value="{{ c.id }}" {% if f_comprador|string == c.id|string %}selected{% endif %}>{{ c.nome_completo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label style="font-size: 0.9em; color: #555; font-weight: bold;">Unidade:</label>
+                <select name="f_empresa" style="margin: 0; width: 100%;">
+                    <option value="">Todas</option>
+                    {% for e in lista_empresas %}
+                        <option value="{{ e.codi_empresa }}" {% if f_empresa|string == e.codi_empresa|string %}selected{% endif %}>{{ e.nome_empresa }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label style="font-size: 0.9em; color: #555; font-weight: bold;">Status:</label>
+                <select name="f_status" style="margin: 0; width: 100%;">
+                    <option value="">Todos</option>
+                    {% for s in lista_status %}
+                        <option value="{{ s }}" {% if f_status == s %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label style="font-size: 0.9em; color: #555; font-weight: bold;">Busca Rápida:</label>
+                <input type="text" name="busca" value="{{ busca }}" placeholder="Ex: 12345, Dell..." style="margin: 0; width: 100%;">
+            </div>
+
+            <div style="display: flex; gap: 5px;">
+                <button type="submit" style="background: #2c3e50; width: 100%; margin: 0;">Filtrar</button>
+                {% if busca or f_empresa or f_comprador or f_status %}
+                    <a href="{{ url_for('dashboard') }}" style="width: 100%; text-decoration: none;">
+                        <button type="button" style="background: #95a5a6; width: 100%; margin: 0;">Limpar</button>
+                    </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
     <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px;">
         <button onclick="mudarAba('geral')" id="btn-geral" style="background: #2c3e50; border-bottom: 4px solid #3498db; color: white;">Visão Geral (Gráficos)</button>
         <button onclick="mudarAba('operacional')" id="btn-operacional" style="background: #95a5a6; color: white; border-bottom: none;">Follow Up Operacional</button>
@@ -18,15 +67,15 @@
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
             <div style="background: linear-gradient(135deg, #3498db, #2980b9); color: white; padding: 20px; border-radius: 8px; text-align: center;">
                 <div style="font-size: 2.5em; font-weight: bold;">{{ kpis.total }}</div>
-                <div>Total de Pedidos</div>
+                <div>Total Filtrado</div>
             </div>
             <div style="background: linear-gradient(135deg, #f1c40f, #f39c12); color: white; padding: 20px; border-radius: 8px; text-align: center;">
                 <div style="font-size: 2.5em; font-weight: bold;">{{ kpis.abertos }}</div>
-                <div style="color: #333; font-weight: bold;">Pedidos em Aberto</div>
+                <div style="color: #333; font-weight: bold;">Em Aberto</div>
             </div>
             <div style="background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; padding: 20px; border-radius: 8px; text-align: center;">
                 <div style="font-size: 2.5em; font-weight: bold;">{{ kpis.atrasados }}</div>
-                <div>Pedidos Atrasados</div>
+                <div>Atrasados</div>
             </div>
         </div>
 
@@ -47,11 +96,9 @@
     </div>
 
     <div id="aba-operacional" style="display: none;">
-        <form action="{{ url_for('dashboard') }}" method="GET" style="margin-bottom: 20px; display: flex; gap: 10px;">
-            <input type="text" name="busca" placeholder="Buscar..." value="{{ busca }}" style="padding: 8px; flex-grow: 1;">
-            <button type="submit" style="margin:0;">🔍</button>
-            {% if busca %}<a href="{{ url_for('dashboard') }}"><button type="button" style="margin:0; background:#999;">X</button></a>{% endif %}
-        </form>
+        <p style="color: #7f8c8d; font-size: 0.9em; margin-bottom: 10px;">
+            * Exibindo resultados conforme os filtros aplicados acima.
+        </p>
 
         <table>
             <thead>
@@ -77,7 +124,7 @@
                         {% if p.arquivo_anexo %}
                             <br><a href="{{ url_for('static', filename='uploads/' + p.arquivo_anexo) }}" target="_blank" style="font-size: 0.8em; color: #2980b9;">📎 Anexo</a>
                         {% endif %}
-                        {% if p.categoria %}<br><span style="font-size:0.7em; background:#eee; padding:2px;">{{ p.categoria }}</span>{% endif %}
+                        {% if p.categoria %}<br><span style="font-size:0.7em; background:#eee; padding:2px; border-radius: 3px;">{{ p.categoria }}</span>{% endif %}
                     </td>
                     <td>{{ p.nome_empresa }}</td>
                     <td>
@@ -101,21 +148,25 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6" style="text-align:center; padding:20px;">Nenhum registro.</td></tr>
+                <tr><td colspan="6" style="text-align:center; padding:20px;">Nenhum registro encontrado para os filtros selecionados.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
 
         <div style="margin-top: 20px; display: flex; justify-content: center; gap: 10px;">
-            {% if pagina > 1 %}<a href="{{ url_for('dashboard', page=pagina-1, busca=busca) }}"><button style="background: #2c3e50;">Anterior</button></a>{% endif %}
+            {% if pagina > 1 %}
+                <a href="{{ url_for('dashboard', page=pagina-1, busca=busca, f_empresa=f_empresa, f_comprador=f_comprador, f_status=f_status) }}"><button style="background: #2c3e50;">Anterior</button></a>
+            {% endif %}
             <span style="padding: 10px; font-weight: bold;">Página {{ pagina }} de {{ total_paginas }}</span>
-            {% if pagina < total_paginas %}<a href="{{ url_for('dashboard', page=pagina+1, busca=busca) }}"><button style="background: #2c3e50;">Próxima</button></a>{% endif %}
+            {% if pagina < total_paginas %}
+                <a href="{{ url_for('dashboard', page=pagina+1, busca=busca, f_empresa=f_empresa, f_comprador=f_comprador, f_status=f_status) }}"><button style="background: #2c3e50;">Próxima</button></a>
+            {% endif %}
         </div>
     </div>
 </div>
 
 <script>
-    // 1. Função de Abas
+    // 1. FUNÇÃO DAS ABAS
     function mudarAba(aba) {
         document.getElementById('aba-geral').style.display = 'none';
         document.getElementById('aba-operacional').style.display = 'none';
@@ -135,27 +186,27 @@
         }
     }
 
-    // 2. Gráficos (Método Blindado e Corrigido)
+    // 2. GRÁFICOS (CORRIGIDO: SEM JSON.PARSE)
     document.addEventListener("DOMContentLoaded", function() {
         try {
             if (typeof Chart === 'undefined') return;
 
-            // CORREÇÃO: Usamos ['values'] com colchetes e aspas.
-            // Isso garante que o Python acesse a chave do dicionário, e não a função interna .values()
+            // AQUI ESTÁ A CORREÇÃO:
+            // Removemos o JSON.parse() porque o 'tojson' do Jinja já entrega o formato pronto.
             
             const statusData = { 
-                labels: JSON.parse({{ graf_status['labels'] | tojson }}), 
-                datasets: [{ data: JSON.parse({{ graf_status['values'] | tojson }}), backgroundColor: ['#3498db', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6'] }] 
+                labels: {{ graf_status['labels'] | tojson }}, 
+                datasets: [{ data: {{ graf_status['values'] | tojson }}, backgroundColor: ['#3498db', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6'] }] 
             };
             
             const fornData = { 
-                labels: JSON.parse({{ graf_forn['labels'] | tojson }}), 
-                datasets: [{ label: 'Pedidos Abertos', data: JSON.parse({{ graf_forn['values'] | tojson }}), backgroundColor: '#e67e22' }] 
+                labels: {{ graf_forn['labels'] | tojson }}, 
+                datasets: [{ label: 'Pedidos Abertos', data: {{ graf_forn['values'] | tojson }}, backgroundColor: '#e67e22' }] 
             };
             
             const compData = { 
-                labels: JSON.parse({{ graf_comp['labels'] | tojson }}), 
-                datasets: [{ label: 'Carteira de Pedidos', data: JSON.parse({{ graf_comp['values'] | tojson }}), backgroundColor: '#9b59b6' }] 
+                labels: {{ graf_comp['labels'] | tojson }}, 
+                datasets: [{ label: 'Carteira de Pedidos', data: {{ graf_comp['values'] | tojson }}, backgroundColor: '#9b59b6' }] 
             };
 
             new Chart(document.getElementById('chartStatus'), { type: 'doughnut', data: statusData });

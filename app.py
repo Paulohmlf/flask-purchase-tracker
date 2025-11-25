@@ -41,7 +41,6 @@ def login():
             return redirect(url_for('dashboard'))
         
         flash('Login inválido ou pendente.')
-    
     return render_template('login.html')
 
 @app.route('/registro', methods=['GET', 'POST'])
@@ -65,10 +64,9 @@ def registro():
             return redirect(url_for('login'))
         except:
             flash('Email já existe.')
-    
     return render_template('registro.html')
 
-# --- DASHBOARD COMPLETO ---
+# --- DASHBOARD TURBINADO (LÓGICA DE BI) ---
 @app.route('/dashboard')
 def dashboard():
     if 'user_id' not in session:
@@ -76,264 +74,224 @@ def dashboard():
     
     conn = get_db_connection()
     
-    # 1. Filtros e Paginação
+    # 1. Captura dos Filtros da URL
     busca = request.args.get('busca', '')
+    f_empresa = request.args.get('f_empresa', '')
+    f_comprador = request.args.get('f_comprador', '')
+    f_status = request.args.get('f_status', '')
+    
     pagina = request.args.get('page', 1, type=int)
     itens_por_pagina = 10
     offset = (pagina - 1) * itens_por_pagina
-    
-    sql_base = ''' FROM acompanhamento_compras c 
-                   JOIN empresas_compras e ON c.codi_empresa = e.codi_empresa '''
-    where_clause = ''
+
+    # 2. Construção Dinâmica do SQL (WHERE)
+    # Isso garante que os filtros se somem (Ex: Matriz E Atrasado E Comprador João)
+    conditions = []
     params = []
-    
+
+    # Filtro de Busca Geral
     if busca:
-        where_clause = ''' WHERE c.numero_solicitacao LIKE ? OR c.numero_pedido LIKE ? 
-                           OR c.fornecedor LIKE ? OR c.item_comprado LIKE ? 
-                           OR c.status_compra LIKE ? '''
+        conditions.append("(c.numero_solicitacao LIKE ? OR c.numero_pedido LIKE ? OR c.fornecedor LIKE ? OR c.item_comprado LIKE ?)")
         t = f'%{busca}%'
-        params = [t, t, t, t, t]
+        params.extend([t, t, t, t])
     
-    total_registros = conn.execute(f'SELECT count(*) {sql_base} {where_clause}', params).fetchone()[0]
+    # Filtros Específicos (Dropdowns)
+    if f_empresa:
+        conditions.append("c.codi_empresa = ?")
+        params.append(f_empresa)
+    
+    if f_comprador:
+        conditions.append("c.id_comprador_responsavel = ?")
+        params.append(f_comprador)
+        
+    if f_status:
+        conditions.append("c.status_compra = ?")
+        params.append(f_status)
+
+    # Monta a cláusula WHERE final
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+    
+    # Base dos JOINS (Ligando as tabelas)
+    sql_joins = """
+        FROM acompanhamento_compras c 
+        JOIN empresas_compras e ON c.codi_empresa = e.codi_empresa 
+        LEFT JOIN usuarios u1 ON c.id_responsavel_chamado = u1.id 
+        LEFT JOIN usuarios u2 ON c.id_comprador_responsavel = u2.id
+    """
+
+    # 3. Execução das Queries (Usando os filtros em tudo)
+    
+    # A) Paginação e Tabela Principal
+    total_registros = conn.execute(f'SELECT count(*) {sql_joins} {where_clause}', params).fetchone()[0]
     total_paginas = math.ceil(total_registros / itens_por_pagina)
     
-    sql_final = f''' SELECT c.*, e.nome_empresa {sql_base} {where_clause} 
-                     ORDER BY c.id DESC LIMIT ? OFFSET ? '''
-    rows = conn.execute(sql_final, params + [itens_por_pagina, offset]).fetchall()
+    sql_tabela = f'''
+        SELECT c.*, e.nome_empresa, u2.nome_completo as nome_comprador 
+        {sql_joins} {where_clause} 
+        ORDER BY c.id DESC LIMIT ? OFFSET ?
+    '''
+    # Adiciona params de paginação no final
+    rows = conn.execute(sql_tabela, params + [itens_por_pagina, offset]).fetchall()
+
+    # B) Dados para Gráficos (Reaproveita o WHERE para consistência)
     
-    # 2. Dados para Gráficos (Aba Gerencial)
-    # Status
-    dados_status = conn.execute(
-        'SELECT status_compra, COUNT(*) as qtd FROM acompanhamento_compras GROUP BY status_compra'
-    ).fetchall()
-    labels_status = [row['status_compra'] for row in dados_status]
-    values_status = [row['qtd'] for row in dados_status]
+    # Gráfico 1: Status
+    sql_status = f"SELECT c.status_compra, COUNT(*) as qtd {sql_joins} {where_clause} GROUP BY c.status_compra"
+    dados_status = conn.execute(sql_status, params).fetchall()
+    labels_status = [r['status_compra'] for r in dados_status]
+    values_status = [r['qtd'] for r in dados_status]
+
+    # Gráfico 2: Top 5 Fornecedores (Pedidos em Aberto)
+    # Precisamos adicionar filtro extra de "Não Entregue"
+    where_forn = where_clause + " AND " if where_clause else "WHERE "
+    sql_forn = f"""
+        SELECT c.fornecedor, COUNT(*) as qtd {sql_joins} 
+        {where_forn} c.status_compra NOT LIKE '%Entregue%' 
+        GROUP BY c.fornecedor ORDER BY qtd DESC LIMIT 5
+    """
+    dados_forn = conn.execute(sql_forn, params).fetchall()
+    labels_forn = [r['fornecedor'] for r in dados_forn]
+    values_forn = [r['qtd'] for r in dados_forn]
+
+    # Gráfico 3: Volume por Comprador
+    sql_comp = f"""
+        SELECT u2.nome_completo, COUNT(*) as qtd {sql_joins} 
+        {where_forn} c.status_compra NOT LIKE '%Entregue%' 
+        GROUP BY u2.nome_completo
+    """
+    dados_comp = conn.execute(sql_comp, params).fetchall()
+    labels_comp = [r['nome_completo'] if r['nome_completo'] else 'Sem Comprador' for r in dados_comp]
+    values_comp = [r['qtd'] for r in dados_comp]
+
+    # C) KPIs (Totais filtrados)
+    sql_kpis = f"SELECT c.status_compra, c.prazo_entrega, c.data_entrega_reprogramada {sql_joins} {where_clause}"
+    all_orders = conn.execute(sql_kpis, params).fetchall()
     
-    # Top Fornecedores
-    dados_forn = conn.execute(
-        """SELECT fornecedor, COUNT(*) as qtd FROM acompanhamento_compras 
-           WHERE status_compra NOT LIKE '%Entregue%' 
-           GROUP BY fornecedor ORDER BY qtd DESC LIMIT 5"""
-    ).fetchall()
-    labels_forn = [row['fornecedor'] for row in dados_forn]
-    values_forn = [row['qtd'] for row in dados_forn]
-    
-    # Compradores
-    dados_comp = conn.execute(
-        """SELECT u.nome_completo, COUNT(*) as qtd 
-           FROM acompanhamento_compras c 
-           JOIN usuarios u ON c.id_comprador_responsavel = u.id 
-           WHERE c.status_compra NOT LIKE '%Entregue%' 
-           GROUP BY u.nome_completo"""
-    ).fetchall()
-    labels_comp = [row['nome_completo'] for row in dados_comp]
-    values_comp = [row['qtd'] for row in dados_comp]
-    
-    # 3. KPIs Gerais
-    kpis = {'total': 0, 'abertos': 0, 'atrasados': 0}
+    kpis = {'total': len(all_orders), 'abertos': 0, 'atrasados': 0}
     hoje = date.today()
-    all_orders = conn.execute(
-        'SELECT status_compra, prazo_entrega, data_entrega_reprogramada FROM acompanhamento_compras'
-    ).fetchall()
     
-    kpis['total'] = len(all_orders)
-    
-    for row in all_orders:
-        if 'Entregue' not in row['status_compra']:
+    for r in all_orders:
+        if 'Entregue' not in r['status_compra']:
             kpis['abertos'] += 1
-            dt_str = row['data_entrega_reprogramada'] or row['prazo_entrega']
+            dt_str = r['data_entrega_reprogramada'] or r['prazo_entrega']
             if dt_str:
                 try:
                     if (datetime.strptime(dt_str, '%Y-%m-%d').date() - hoje).days < 0:
                         kpis['atrasados'] += 1
                 except:
                     pass
-    
+
+    # 4. Carregar Listas para os Dropdowns (Filtros)
+    lista_empresas = conn.execute("SELECT * FROM empresas_compras ORDER BY nome_empresa").fetchall()
+    lista_compradores = conn.execute("SELECT * FROM usuarios WHERE nivel_acesso IN ('comprador', 'admin') ORDER BY nome_completo").fetchall()
+    lista_status = [
+        "Aguardando Aprovação", "Enviado ao Fornecedor", "Confirmado", 
+        "Em Trânsito", "Entregue Parcialmente", "Entregue Totalmente"
+    ]
+
     conn.close()
-    
-    # 4. Processamento Visual da Tabela
+
+    # Processamento Visual (Cores e Datas)
     pedidos = [dict(row) for row in rows]
     
     for p in pedidos:
         s = p['status_compra']
-        
-        if s == 'Aguardando Aprovação':
-            p.update({'cor_s': '#9b59b6', 'txt_s': 'ORÇAMENTO'})
-        elif s in ['Confirmado', 'Enviado ao Fornecedor', 'Em Trânsito']:
-            p.update({'cor_s': '#3498db', 'txt_s': 'COMPRADO'})
-        elif 'Entregue' in s:
-            p.update({'cor_s': '#2ecc71', 'txt_s': 'ENTREGUE'})
-        else:
-            p.update({'cor_s': '#95a5a6', 'txt_s': s})
-        
+        if s == 'Aguardando Aprovação': p.update({'cor_s': '#9b59b6', 'txt_s': 'ORÇAMENTO'})
+        elif s in ['Confirmado', 'Enviado ao Fornecedor', 'Em Trânsito']: p.update({'cor_s': '#3498db', 'txt_s': 'COMPRADO'})
+        elif 'Entregue' in s: p.update({'cor_s': '#2ecc71', 'txt_s': 'ENTREGUE'})
+        else: p.update({'cor_s': '#95a5a6', 'txt_s': s})
+
         dt_str = p['data_entrega_reprogramada'] or p['prazo_entrega']
         
         if dt_str and 'Entregue' not in s:
             try:
                 dias = (datetime.strptime(dt_str, '%Y-%m-%d').date() - hoje).days
-                if dias < 0:
-                    p.update({'cor_p': '#e74c3c', 'txt_p': 'ATRASADO', 
-                             'cor_s': '#e74c3c', 'txt_s': 'ATRASADO'})
-                elif dias <= 2:
-                    p.update({'cor_p': '#f1c40f', 'txt_p': 'ATENÇÃO'})
-                else:
-                    p.update({'cor_p': '#2ecc71', 'txt_p': 'NO PRAZO'})
-            except:
-                p.update({'cor_p': 'transparent', 'txt_p': '-'})
-        else:
-            p.update({'cor_p': 'transparent', 'txt_p': '-'})
-        
+                if dias < 0: p.update({'cor_p': '#e74c3c', 'txt_p': 'ATRASADO', 'cor_s': '#e74c3c', 'txt_s': 'ATRASADO'})
+                elif dias <= 2: p.update({'cor_p': '#f1c40f', 'txt_p': 'ATENÇÃO'})
+                else: p.update({'cor_p': '#2ecc71', 'txt_p': 'NO PRAZO'})
+            except: p.update({'cor_p': 'transparent', 'txt_p': '-'})
+        else: p.update({'cor_p': 'transparent', 'txt_p': '-'})
+
         if p['prazo_entrega']:
             p['prazo_entrega'] = datetime.strptime(p['prazo_entrega'], '%Y-%m-%d').strftime('%d/%m/%Y')
         if p['data_entrega_reprogramada']:
-            p['data_entrega_reprogramada'] = datetime.strptime(
-                p['data_entrega_reprogramada'], '%Y-%m-%d'
-            ).strftime('%d/%m/%Y')
-    
-    # RETORNO CORRIGIDO: enviamos os dicionários completos para o HTML
-    return render_template('dashboard.html', 
-                         pedidos=pedidos, 
-                         pagina=pagina, 
-                         total_paginas=total_paginas, 
-                         busca=busca, 
-                         kpis=kpis,
-                         graf_status={'labels': labels_status, 'values': values_status},
-                         graf_forn={'labels': labels_forn, 'values': values_forn},
-                         graf_comp={'labels': labels_comp, 'values': values_comp})
+            p['data_entrega_reprogramada'] = datetime.strptime(p['data_entrega_reprogramada'], '%Y-%m-%d').strftime('%d/%m/%Y')
 
-# --- ROTAS DE CADASTRO E EDIÇÃO ---
+    return render_template('dashboard.html', 
+                           pedidos=pedidos, pagina=pagina, total_paginas=total_paginas,
+                           # Filtros Atuais (para manter selecionado)
+                           busca=busca, f_empresa=f_empresa, f_comprador=f_comprador, f_status=f_status,
+                           # Listas para os Menus
+                           lista_empresas=lista_empresas, lista_compradores=lista_compradores, lista_status=lista_status,
+                           # Dados
+                           kpis=kpis,
+                           graf_status={'labels': labels_status, 'values': values_status},
+                           graf_forn={'labels': labels_forn, 'values': values_forn},
+                           graf_comp={'labels': labels_comp, 'values': values_comp})
+
+# --- ROTAS DE CADASTRO E EDIÇÃO (MANTIDAS IGUAIS) ---
 @app.route('/nova_compra', methods=['GET', 'POST'])
 def nova_compra():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
+    if 'user_id' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
-    
     if request.method == 'POST':
-        f = request.form
-        arq = request.files.get('arquivo')
-        nome_arq = None
-        
+        f = request.form; arq = request.files.get('arquivo'); nome_arq = None
         if arq and allowed_file(arq.filename):
             nome_arq = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{arq.filename}")
             arq.save(os.path.join(app.config['UPLOAD_FOLDER'], nome_arq))
         
-        conn.execute('''INSERT INTO acompanhamento_compras 
-                       (numero_solicitacao, numero_orcamento, numero_pedido, item_comprado, 
-                        categoria, fornecedor, data_compra, nota_fiscal, serie_nota, 
-                        arquivo_anexo, observacao, codi_empresa, id_responsavel_chamado, 
-                        id_comprador_responsavel, prazo_entrega, status_compra) 
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                    (f['solicitacao'], f['orcamento'], f['pedido'], f['item'], 
-                     f.get('categoria'), f['fornecedor'], f['data_compra'] or None, 
-                     f['nota'], f['serie'], nome_arq, f.get('observacao'), f['empresa'], 
-                     f['resp_chamado'], f['resp_comprador'], f['prazo'] or None, f['status']))
-        
-        conn.commit()
-        conn.close()
-        return redirect(url_for('dashboard'))
+        conn.execute('''INSERT INTO acompanhamento_compras (numero_solicitacao, numero_orcamento, numero_pedido, item_comprado, categoria, fornecedor, data_compra, nota_fiscal, serie_nota, arquivo_anexo, observacao, codi_empresa, id_responsavel_chamado, id_comprador_responsavel, prazo_entrega, status_compra) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', 
+                     (f['solicitacao'], f['orcamento'], f['pedido'], f['item'], f.get('categoria'), f['fornecedor'], f['data_compra'] or None, f['nota'], f['serie'], nome_arq, f.get('observacao'), f['empresa'], f['resp_chamado'], f['resp_comprador'], f['prazo'] or None, f['status']))
+        conn.commit(); conn.close(); return redirect(url_for('dashboard'))
     
     empresas = conn.execute('SELECT * FROM empresas_compras').fetchall()
     usuarios = conn.execute('SELECT * FROM usuarios WHERE aprovado = 1').fetchall()
-    conn.close()
-    
-    return render_template('nova_compra.html', empresas=empresas, usuarios=usuarios)
+    conn.close(); return render_template('nova_compra.html', empresas=empresas, usuarios=usuarios)
 
 @app.route('/editar_pedido/<int:id>', methods=['GET', 'POST'])
 def editar_pedido(id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
-    conn = get_db_connection()
-    pedido = conn.execute('SELECT * FROM acompanhamento_compras WHERE id = ?', (id,)).fetchone()
-    
+    if 'user_id' not in session: return redirect(url_for('login'))
+    conn = get_db_connection(); pedido = conn.execute('SELECT * FROM acompanhamento_compras WHERE id = ?', (id,)).fetchone()
     if request.method == 'POST':
-        f = request.form
-        arq = request.files.get('arquivo')
-        nome_arq = pedido['arquivo_anexo']
-        
+        f = request.form; arq = request.files.get('arquivo'); nome_arq = pedido['arquivo_anexo']
         if arq and allowed_file(arq.filename):
             nome_arq = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{arq.filename}")
             arq.save(os.path.join(app.config['UPLOAD_FOLDER'], nome_arq))
         
-        conn.execute('''UPDATE acompanhamento_compras 
-                       SET numero_solicitacao=?, numero_orcamento=?, numero_pedido=?, 
-                           item_comprado=?, categoria=?, fornecedor=?, data_compra=?, 
-                           prazo_entrega=?, data_entrega_reprogramada=?, nota_fiscal=?, 
-                           serie_nota=?, status_compra=?, arquivo_anexo=?, observacao=? 
-                       WHERE id=?''',
-                    (f['solicitacao'], f['orcamento'], f['pedido'], f['item'], 
-                     f.get('categoria'), f['fornecedor'], f['data_compra'] or None, 
-                     f['prazo'] or None, f['reprogramada'] or None, f['nota'], 
-                     f['serie'], f['status'], nome_arq, f.get('observacao'), id))
-        
-        conn.commit()
-        conn.close()
-        return redirect(url_for('dashboard'))
-    
+        conn.execute('''UPDATE acompanhamento_compras SET numero_solicitacao=?, numero_orcamento=?, numero_pedido=?, item_comprado=?, categoria=?, fornecedor=?, data_compra=?, prazo_entrega=?, data_entrega_reprogramada=?, nota_fiscal=?, serie_nota=?, status_compra=?, arquivo_anexo=?, observacao=? WHERE id=?''', 
+                     (f['solicitacao'], f['orcamento'], f['pedido'], f['item'], f.get('categoria'), f['fornecedor'], f['data_compra'] or None, f['prazo'] or None, f['reprogramada'] or None, f['nota'], f['serie'], f['status'], nome_arq, f.get('observacao'), id))
+        conn.commit(); conn.close(); return redirect(url_for('dashboard'))
     return render_template('editar_pedido.html', pedido=pedido)
 
 @app.route('/excluir_pedido/<int:id>')
 def excluir_pedido(id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
-    conn = get_db_connection()
-    p = conn.execute('SELECT arquivo_anexo FROM acompanhamento_compras WHERE id=?', (id,)).fetchone()
-    
-    if p and p['arquivo_anexo']:
-        try:
-            os.remove(os.path.join(app.config['UPLOAD_FOLDER'], p['arquivo_anexo']))
-        except:
-            pass
-    
-    conn.execute('DELETE FROM acompanhamento_compras WHERE id=?', (id,))
-    conn.commit()
-    conn.close()
-    
-    flash('Excluído!')
-    return redirect(url_for('dashboard'))
+    if 'user_id' not in session: return redirect(url_for('login'))
+    conn = get_db_connection(); p = conn.execute('SELECT arquivo_anexo FROM acompanhamento_compras WHERE id=?',(id,)).fetchone()
+    if p and p['arquivo_anexo']: 
+        try: os.remove(os.path.join(app.config['UPLOAD_FOLDER'], p['arquivo_anexo']))
+        except: pass
+    conn.execute('DELETE FROM acompanhamento_compras WHERE id=?',(id,)); conn.commit(); conn.close()
+    flash('Excluído!'); return redirect(url_for('dashboard'))
 
 @app.route('/excluir_anexo/<int:id>')
 def excluir_anexo(id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
-    conn = get_db_connection()
-    p = conn.execute('SELECT arquivo_anexo FROM acompanhamento_compras WHERE id=?', (id,)).fetchone()
-    
+    if 'user_id' not in session: return redirect(url_for('login'))
+    conn = get_db_connection(); p = conn.execute('SELECT arquivo_anexo FROM acompanhamento_compras WHERE id=?',(id,)).fetchone()
     if p and p['arquivo_anexo']:
-        try:
-            os.remove(os.path.join(app.config['UPLOAD_FOLDER'], p['arquivo_anexo']))
-        except:
-            pass
-    
-    conn.execute('UPDATE acompanhamento_compras SET arquivo_anexo=NULL WHERE id=?', (id,))
-    conn.commit()
-    conn.close()
-    
-    return redirect(url_for('editar_pedido', id=id))
+        try: os.remove(os.path.join(app.config['UPLOAD_FOLDER'], p['arquivo_anexo']))
+        except: pass
+        conn.execute('UPDATE acompanhamento_compras SET arquivo_anexo=NULL WHERE id=?',(id,)); conn.commit()
+    conn.close(); return redirect(url_for('editar_pedido', id=id))
 
 @app.route('/admin/usuarios', methods=['GET', 'POST'])
 def admin_usuarios():
-    if session.get('user_nivel') != 'admin':
-        return redirect(url_for('dashboard'))
-    
+    if session.get('user_nivel') != 'admin': return redirect(url_for('dashboard'))
     conn = get_db_connection()
-    
-    if request.method == 'POST':
-        conn.execute('UPDATE usuarios SET aprovado=1 WHERE id=?', (request.form['user_id'],))
-        conn.commit()
-    
-    pendentes = conn.execute('SELECT * FROM usuarios WHERE aprovado=0').fetchall()
-    conn.close()
-    
+    if request.method == 'POST': conn.execute('UPDATE usuarios SET aprovado=1 WHERE id=?',(request.form['user_id'],)); conn.commit()
+    pendentes = conn.execute('SELECT * FROM usuarios WHERE aprovado=0').fetchall(); conn.close()
     return render_template('admin_usuarios.html', pendentes=pendentes)
 
 @app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
+def logout(): session.clear(); return redirect(url_for('login'))
 
-if __name__ == '__main__':
-    app.run(debug=True)
+if __name__ == '__main__': app.run(debug=True)
