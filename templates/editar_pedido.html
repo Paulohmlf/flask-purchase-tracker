@@ -34,6 +34,8 @@
             </div>
             
             <div>
+                <label>Data da Compra:</label><input type="date" name="data_compra" value="{{ pedido.data_compra or '' }}">
+                
                 <label>Prazo Original:</label><input type="date" name="prazo" value="{{ pedido.prazo_entrega or '' }}">
                 <label style="color: #d35400;">Nova Data (se atrasou):</label><input type="date" name="reprogramada" value="{{ pedido.data_entrega_reprogramada or '' }}">
                 
