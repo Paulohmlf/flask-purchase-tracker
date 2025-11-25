@@ -1,5 +1,3 @@
-Aqui está o arquivo `README.md` completo para o seu projeto, formatado com as informações do sistema, o foco em Acessibilidade e as instruções de configuração.
-
 -----
 
 # 🛒 Sistema de Follow Up de Compras (Nutrane)
