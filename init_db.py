@@ -65,7 +65,6 @@ def criar_banco():
                        ('Administrador', 'admin@nutrane.com.br', senha_admin, 'admin', 1))
     except sqlite3.IntegrityError: pass
 
-    # --- EMPRESAS ATUALIZADAS (BASEADO NO CSV) ---
     empresas = [
         (2, 'Durancho Sertania'),
         (7, 'Nutrane Bahia'),
