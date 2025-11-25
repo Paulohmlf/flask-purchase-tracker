@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 400px; margin: 0 auto;">
+    <h2>Criar Nova Conta</h2>
+    <form method="POST">
+        <label>Nome Completo:</label>
+        <input type="text" name="nome" required>
+
+        <label>Email:</label>
+        <input type="email" name="email" required>
+
+        <label>Senha (mínimo 6 dígitos):</label>
+        <input type="password" name="senha" required minlength="6">
+
+        <button type="submit">Cadastrar</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,14 @@
+# Ignorar ambiente virtual
+venv/
+.env
+
+# Ignorar arquivos compilados do Python
+__pycache__/
+*.pyc
+
+# Ignorar o Banco de Dados (Ele é gerado pelo init_db.py)
+database.db
+
+# Ignorar uploads de teste (mas manter a pasta)
+static/uploads/*
+!static/uploads/.gitkeep

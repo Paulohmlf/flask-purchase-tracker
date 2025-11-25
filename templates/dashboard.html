@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>Dashboard de Compras</h2>
+        <a href="{{ url_for('nova_compra') }}"><button>+ Novo Pedido</button></a>
+    </div>
+
+    <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px;">
+        <button onclick="mudarAba('geral')" id="btn-geral" style="background: #2c3e50; border-bottom: 4px solid #3498db; color: white;">Visão Geral (Gráficos)</button>
+        <button onclick="mudarAba('operacional')" id="btn-operacional" style="background: #95a5a6; color: white; border-bottom: none;">Follow Up Operacional</button>
+    </div>
+
+    <div id="aba-geral">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
+            <div style="background: linear-gradient(135deg, #3498db, #2980b9); color: white; padding: 20px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 2.5em; font-weight: bold;">{{ kpis.total }}</div>
+                <div>Total de Pedidos</div>
+            </div>
+            <div style="background: linear-gradient(135deg, #f1c40f, #f39c12); color: white; padding: 20px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 2.5em; font-weight: bold;">{{ kpis.abertos }}</div>
+                <div style="color: #333; font-weight: bold;">Pedidos em Aberto</div>
+            </div>
+            <div style="background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; padding: 20px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 2.5em; font-weight: bold;">{{ kpis.atrasados }}</div>
+                <div>Pedidos Atrasados</div>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div style="background: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 8px;">
+                <h3 style="text-align: center; color: #555;">Status dos Pedidos</h3>
+                <canvas id="chartStatus"></canvas>
+            </div>
+            <div style="background: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 8px;">
+                <h3 style="text-align: center; color: #555;">Top Fornecedores (Em Aberto)</h3>
+                <canvas id="chartForn"></canvas>
+            </div>
+            <div style="background: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 8px; grid-column: span 2;">
+                <h3 style="text-align: center; color: #555;">Volume por Comprador</h3>
+                <canvas id="chartComp" style="max-height: 250px;"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="aba-operacional" style="display: none;">
+        <form action="{{ url_for('dashboard') }}" method="GET" style="margin-bottom: 20px; display: flex; gap: 10px;">
+            <input type="text" name="busca" placeholder="Buscar..." value="{{ busca }}" style="padding: 8px; flex-grow: 1;">
+            <button type="submit" style="margin:0;">🔍</button>
+            {% if busca %}<a href="{{ url_for('dashboard') }}"><button type="button" style="margin:0; background:#999;">X</button></a>{% endif %}
+        </form>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Solicitação</th>
+                    <th>Item / Fornecedor</th>
+                    <th>Empresa</th>
+                    <th>Prazo / Farol</th>
+                    <th>Status</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in pedidos %}
+                <tr>
+                    <td>
+                        <strong>{{ p.numero_solicitacao }}</strong><br>
+                        {% if p.numero_pedido %}<small style="color:#777;">Ped: {{ p.numero_pedido }}</small>{% endif %}
+                    </td>
+                    <td>
+                        <strong>{{ p.item_comprado }}</strong><br>
+                        <small>{{ p.fornecedor }}</small>
+                        {% if p.arquivo_anexo %}
+                            <br><a href="{{ url_for('static', filename='uploads/' + p.arquivo_anexo) }}" target="_blank" style="font-size: 0.8em; color: #2980b9;">📎 Anexo</a>
+                        {% endif %}
+                        {% if p.categoria %}<br><span style="font-size:0.7em; background:#eee; padding:2px;">{{ p.categoria }}</span>{% endif %}
+                    </td>
+                    <td>{{ p.nome_empresa }}</td>
+                    <td>
+                        {% if p.data_entrega_reprogramada %}
+                            <div style="font-size:0.8em; color:#999; text-decoration:line-through;">{{ p.prazo_entrega }}</div>
+                            <div style="color:#d35400; font-weight:bold;">{{ p.data_entrega_reprogramada }}</div>
+                        {% elif p.prazo_entrega %}{{ p.prazo_entrega }}{% else %}-{% endif %}
+                        
+                        {% if p.txt_p != '-' %}
+                            <span style="display:inline-block; padding:2px 8px; border-radius:10px; color:white; font-size:0.7em; background-color:{{ p.cor_p }}">{{ p.txt_p }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="padding:5px; color:white; font-weight:bold; font-size:0.8em; text-align:center; border-radius:4px; background-color:{{ p.cor_s }}">{{ p.txt_s }}</div>
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 5px;">
+                            <a href="{{ url_for('editar_pedido', id=p.id) }}"><button style="padding:5px 10px; background:#f39c12; margin:0;">✏️</button></a>
+                            <a href="{{ url_for('excluir_pedido', id=p.id) }}" onclick="return confirm('Excluir?')"><button style="padding:5px 10px; background:#c0392b; margin:0;">🗑️</button></a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" style="text-align:center; padding:20px;">Nenhum registro.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div style="margin-top: 20px; display: flex; justify-content: center; gap: 10px;">
+            {% if pagina > 1 %}<a href="{{ url_for('dashboard', page=pagina-1, busca=busca) }}"><button style="background: #2c3e50;">Anterior</button></a>{% endif %}
+            <span style="padding: 10px; font-weight: bold;">Página {{ pagina }} de {{ total_paginas }}</span>
+            {% if pagina < total_paginas %}<a href="{{ url_for('dashboard', page=pagina+1, busca=busca) }}"><button style="background: #2c3e50;">Próxima</button></a>{% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1. Função de Abas
+    function mudarAba(aba) {
+        document.getElementById('aba-geral').style.display = 'none';
+        document.getElementById('aba-operacional').style.display = 'none';
+        document.getElementById('btn-geral').style.background = '#95a5a6';
+        document.getElementById('btn-geral').style.borderBottom = 'none';
+        document.getElementById('btn-operacional').style.background = '#95a5a6';
+        document.getElementById('btn-operacional').style.borderBottom = 'none';
+
+        if (aba === 'geral') {
+            document.getElementById('aba-geral').style.display = 'block';
+            document.getElementById('btn-geral').style.background = '#2c3e50';
+            document.getElementById('btn-geral').style.borderBottom = '4px solid #3498db';
+        } else {
+            document.getElementById('aba-operacional').style.display = 'block';
+            document.getElementById('btn-operacional').style.background = '#2c3e50';
+            document.getElementById('btn-operacional').style.borderBottom = '4px solid #3498db';
+        }
+    }
+
+    // 2. Gráficos (Método Blindado e Corrigido)
+    document.addEventListener("DOMContentLoaded", function() {
+        try {
+            if (typeof Chart === 'undefined') return;
+
+            // CORREÇÃO: Usamos ['values'] com colchetes e aspas.
+            // Isso garante que o Python acesse a chave do dicionário, e não a função interna .values()
+            
+            const statusData = { 
+                labels: JSON.parse({{ graf_status['labels'] | tojson }}), 
+                datasets: [{ data: JSON.parse({{ graf_status['values'] | tojson }}), backgroundColor: ['#3498db', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6'] }] 
+            };
+            
+            const fornData = { 
+                labels: JSON.parse({{ graf_forn['labels'] | tojson }}), 
+                datasets: [{ label: 'Pedidos Abertos', data: JSON.parse({{ graf_forn['values'] | tojson }}), backgroundColor: '#e67e22' }] 
+            };
+            
+            const compData = { 
+                labels: JSON.parse({{ graf_comp['labels'] | tojson }}), 
+                datasets: [{ label: 'Carteira de Pedidos', data: JSON.parse({{ graf_comp['values'] | tojson }}), backgroundColor: '#9b59b6' }] 
+            };
+
+            new Chart(document.getElementById('chartStatus'), { type: 'doughnut', data: statusData });
+            new Chart(document.getElementById('chartForn'), { type: 'bar', data: fornData });
+            new Chart(document.getElementById('chartComp'), { type: 'bar', data: compData });
+
+        } catch (error) { console.error("Erro gráficos:", error); }
+    });
+</script>
+{% endblock %}

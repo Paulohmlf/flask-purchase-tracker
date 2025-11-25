@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card" style="max-width: 800px; margin: 0 auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>Lançar Nova Compra</h2>
+        <a href="{{ url_for('dashboard') }}" style="color: #e74c3c; text-decoration: none;">Cancelar</a>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            
+            <div>
+                <label>Nº Solicitação:</label>
+                <input type="text" name="solicitacao" required placeholder="Ex: 12345">
+
+                <label>Nº Orçamento:</label>
+                <input type="text" name="orcamento" placeholder="Ex: ORC-2023/500">
+
+                <label>Nº Pedido:</label>
+                <input type="text" name="pedido" placeholder="Ex: PED-999">
+
+                <label>Item Comprado:</label>
+                <input type="text" name="item" required placeholder="Ex: Computador Dell">
+                
+                <label>Fornecedor:</label>
+                <input type="text" name="fornecedor" required placeholder="Ex: Kabum">
+
+                <label>Empresa:</label>
+                <select name="empresa" required>
+                    <option value="" disabled selected>-- Selecione a Loja --</option>
+                    {% for emp in empresas %}
+                        <option value="{{ emp.codi_empresa }}">{{ emp.nome_empresa }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label>Data da Compra:</label>
+                <input type="date" name="data_compra">
+
+                <label>Prazo de Entrega (Previsão):</label>
+                <input type="date" name="prazo">
+                
+                <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
+
+                <label style="color: #2980b9;">Anexar Arquivo (PDF/Foto):</label>
+                <input type="file" name="arquivo" accept=".pdf,.jpg,.jpeg,.png">
+
+                <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
+
+                <label>Nota Fiscal:</label>
+                <input type="text" name="nota">
+
+                <label>Série:</label>
+                <input type="text" name="serie">
+                
+                <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
+
+                <label>Responsáveis:</label>
+                <select name="resp_comprador">
+                    <option value="">-- Comprador Responsável --</option>
+                    {% for u in usuarios %}
+                        <option value="{{ u.id }}">{{ u.nome_completo }}</option>
+                    {% endfor %}
+                </select>
+                
+                <select name="resp_chamado" style="margin-top: 10px;">
+                    <option value="">-- Resp. pelo Chamado --</option>
+                    {% for u in usuarios %}
+                        <option value="{{ u.id }}">{{ u.nome_completo }}</option>
+                    {% endfor %}
+                </select>
+
+                <label style="margin-top: 15px;">Status Inicial:</label>
+                <select name="status" style="font-weight: bold;">
+                    <option value="Aguardando Aprovação">Aguardando Aprovação</option>
+                    <option value="Enviado ao Fornecedor">Enviado ao Fornecedor</option>
+                    <option value="Confirmado">Confirmado</option>
+                </select>
+            </div>
+        </div>
+
+        <button type="submit" style="width: 100%; margin-top: 30px; background-color: #2980b9;">Salvar Pedido</button>
+    </form>
+</div>
+{% endblock %}

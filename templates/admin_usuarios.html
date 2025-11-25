@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <h2>Aprovação de Usuários Pendentes</h2>
+    <p>Os usuários abaixo se cadastraram mas ainda não podem acessar o sistema.</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Email</th>
+                <th>Ação</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in pendentes %}
+            <tr>
+                <td>{{ user.nome_completo }}</td>
+                <td>{{ user.email }}</td>
+                <td>
+                    <form method="POST" style="margin:0;">
+                        <input type="hidden" name="user_id" value="{{ user.id }}">
+                        <button type="submit" style="background-color: #27ae60; margin:0; padding: 5px 15px;">Aprovar</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="3" style="text-align: center;">Nenhum usuário pendente de aprovação.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

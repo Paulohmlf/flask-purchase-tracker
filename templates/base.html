@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistema de Compras - Nutrane</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <nav>
+        <div class="brand">Nutrane Compras</div>
+        <div>
+            {% if session.get('user_id') %}
+                <span>Olá, {{ session.get('user_name') }}</span>
+                <a href="{{ url_for('dashboard') }}">Dashboard</a>
+                <a href="{{ url_for('nova_compra') }}">Novo Pedido</a>
+                {% if session.get('user_nivel') == 'admin' %}
+                    <a href="{{ url_for('admin_usuarios') }}" style="color: #f1c40f;">Aprovar Usuários</a>
+                {% endif %}
+                <a href="{{ url_for('logout') }}">Sair</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">Entrar</a>
+                <a href="{{ url_for('registro') }}">Cadastrar-se</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="flash">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+</body>
+</html>
