@@ -44,6 +44,29 @@
                 <label>Nota Fiscal:</label><input type="text" name="nota" value="{{ pedido.nota_fiscal or '' }}">
                 <label>Série:</label><input type="text" name="serie" value="{{ pedido.serie_nota or '' }}">
                 
+                <hr style="margin: 20px 0;">
+                
+                <label>Comprador Responsável:</label>
+                <select name="resp_comprador">
+                    <option value="">-- Selecione o Comprador --</option>
+                    {% for u in usuarios %}
+                        <option value="{{ u.id }}" {% if pedido.id_comprador_responsavel|string == u.id|string %}selected{% endif %}>
+                            {{ u.nome_completo }}
+                        </option>
+                    {% endfor %}
+                </select>
+                <span class="ajuda-campo">O responsável por fazer a compra.</span>
+                
+                <label>Responsável pelo Chamado:</label>
+                <select name="resp_chamado">
+                    <option value="">-- Selecione o Solicitante --</option>
+                    {% for u in usuarios %}
+                        <option value="{{ u.id }}" {% if pedido.id_responsavel_chamado|string == u.id|string %}selected{% endif %}>
+                            {{ u.nome_completo }}
+                        </option>
+                    {% endfor %}
+                </select>
+                <span class="ajuda-campo">Quem abriu a solicitação de compra.</span>
             </div>
             
             <div style="grid-column: 1 / -1;">

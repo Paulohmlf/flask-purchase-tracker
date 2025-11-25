@@ -337,19 +337,26 @@ def nova_compra():
 @app.route('/editar_pedido/<int:id>', methods=['GET', 'POST'])
 def editar_pedido(id):
     if 'user_id' not in session: return redirect(url_for('login'))
-    conn = get_db_connection(); pedido = conn.execute('SELECT * FROM acompanhamento_compras WHERE id = ?', (id,)).fetchone()
+    conn = get_db_connection()
+    
+    pedido = conn.execute('SELECT * FROM acompanhamento_compras WHERE id = ?', (id,)).fetchone()
+    usuarios = conn.execute('SELECT * FROM usuarios WHERE aprovado = 1 ORDER BY nome_completo').fetchall()
+    
     if request.method == 'POST':
         f = request.form; arq = request.files.get('arquivo'); nome_arq = pedido['arquivo_anexo']
         if arq and allowed_file(arq.filename):
             nome_arq = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{arq.filename}")
             arq.save(os.path.join(app.config['UPLOAD_FOLDER'], nome_arq))
-            
-        # CORREÇÃO CRÍTICA: Usando f.get() para todos os campos opcionais
-        conn.execute('''UPDATE acompanhamento_compras SET numero_solicitacao=?, numero_orcamento=?, numero_pedido=?, item_comprado=?, categoria=?, fornecedor=?, data_compra=?, prazo_entrega=?, data_entrega_reprogramada=?, nota_fiscal=?, serie_nota=?, status_compra=?, arquivo_anexo=?, observacao=? WHERE id=?''', 
-                     (f['solicitacao'], f.get('orcamento'), f.get('pedido'), f['item'], f.get('categoria'), f['fornecedor'], f.get('data_compra') or None, f.get('prazo') or None, f.get('reprogramada') or None, f.get('nota'), f.get('serie'), f['status'], nome_arq, f.get('observacao'), id))
+        
+        conn.execute('''UPDATE acompanhamento_compras SET numero_solicitacao=?, numero_orcamento=?, numero_pedido=?, item_comprado=?, categoria=?, fornecedor=?, data_compra=?, prazo_entrega=?, data_entrega_reprogramada=?, nota_fiscal=?, serie_nota=?, status_compra=?, arquivo_anexo=?, observacao=?, id_responsavel_chamado=?, id_comprador_responsavel=? WHERE id=?''', 
+                     (f['solicitacao'], f.get('orcamento'), f.get('pedido'), f['item'], f.get('categoria'), f['fornecedor'], f.get('data_compra') or None, f.get('prazo') or None, f.get('reprogramada') or None, f.get('nota'), f.get('serie'), f['status'], nome_arq, f.get('observacao'), 
+                      f.get('resp_chamado') or None, f.get('resp_comprador') or None, 
+                      id))
         
         conn.commit(); conn.close(); return redirect(url_for('dashboard'))
-    return render_template('editar_pedido.html', pedido=pedido)
+    
+    conn.close()
+    return render_template('editar_pedido.html', pedido=pedido, usuarios=usuarios)
 
 @app.route('/excluir_pedido/<int:id>')
 def excluir_pedido(id):
