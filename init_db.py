@@ -65,20 +65,20 @@ def criar_banco():
                        ('Administrador', 'admin@nutrane.com.br', senha_admin, 'admin', 1))
     except sqlite3.IntegrityError: pass
 
-    # Empresas Reais (Baseado no PDF )
+    # --- EMPRESAS ATUALIZADAS (BASEADO NO CSV) ---
     empresas = [
-        (1, 'Matriz'),
-        (2, 'Carpina'),
-        (3, 'Pesqueira'),
-        (4, 'Teresina'),
-        (5, 'Bahia'),
-        (6, 'Fazenda Várzea Alegre'),
-        (7, 'Ipojuca'),
-        (8, 'Sertânia')
+        (2, 'Durancho Sertania'),
+        (7, 'Nutrane Bahia'),
+        (4, 'Nutrane Carpina'),
+        (1, 'Nutrane Pesqueira'),
+        (6, 'Nutrane Piaui'),
+        (10, 'Nutrind')
     ]
     try:
-        cursor.executemany("INSERT INTO empresas_compras (codi_empresa, nome_empresa) VALUES (?, ?)", empresas)
-        print("Unidades (Filiais) atualizadas conforme PDF!")
+        # A instrução REPLACE INTO é mais segura para garantir que as empresas estejam corretas
+        # sem violar a chave primária se o script for rodado mais de uma vez.
+        cursor.executemany("REPLACE INTO empresas_compras (codi_empresa, nome_empresa) VALUES (?, ?)", empresas)
+        print("Unidades (Filiais) atualizadas conforme CSV!")
     except sqlite3.IntegrityError: pass
 
     connection.commit()
