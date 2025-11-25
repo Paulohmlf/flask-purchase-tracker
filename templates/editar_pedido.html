@@ -1,59 +1,81 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card" style="max-width: 800px; margin: 0 auto;">
-    <div style="display: flex; justify-content: space-between;">
-        <h2>Atualizar Pedido #{{ pedido.id }}</h2>
-        <a href="{{ url_for('dashboard') }}" style="color: red;">Cancelar</a>
+<div class="card" style="max-width: 800px; margin: 0 auto; border-top: 6px solid #f39c12;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0; border: none;">✏️ Editando Pedido #{{ pedido.id }}</h2>
     </div>
     
     <form method="POST" enctype="multipart/form-data">
-        <div style="background-color: #f8f9fa; padding: 10px; margin-bottom: 20px;">
-            <label>Status Atual:</label>
-            <select name="status">
-                <option value="Aguardando Aprovação" {% if pedido.status_compra == 'Aguardando Aprovação' %}selected{% endif %}>Aguardando Aprovação</option>
-                <option value="Enviado ao Fornecedor" {% if pedido.status_compra == 'Enviado ao Fornecedor' %}selected{% endif %}>Enviado ao Fornecedor</option>
-                <option value="Confirmado" {% if pedido.status_compra == 'Confirmado' %}selected{% endif %}>Confirmado</option>
-                <option value="Em Trânsito" {% if pedido.status_compra == 'Em Trânsito' %}selected{% endif %}>Em Trânsito</option>
-                <option value="Entregue Parcialmente" {% if pedido.status_compra == 'Entregue Parcialmente' %}selected{% endif %}>Entregue Parcialmente</option>
-                <option value="Entregue Totalmente" {% if pedido.status_compra == 'Entregue Totalmente' %}selected{% endif %}>Entregue Totalmente</option>
+        
+        <div style="background-color: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #ffeeba;">
+            <label style="margin-top: 0; color: #856404;">Qual a situação atual?</label>
+            <select name="status" style="font-weight: bold; font-size: 1.2rem; border-color: #f39c12;">
+                <option value="Aguardando Aprovação" {% if pedido.status_compra == 'Aguardando Aprovação' %}selected{% endif %}>🟡 Aguardando Aprovação</option>
+                <option value="Enviado ao Fornecedor" {% if pedido.status_compra == 'Enviado ao Fornecedor' %}selected{% endif %}>🔵 Enviado ao Fornecedor</option>
+                <option value="Confirmado" {% if pedido.status_compra == 'Confirmado' %}selected{% endif %}>🔵 Confirmado</option>
+                <option value="Em Trânsito" {% if pedido.status_compra == 'Em Trânsito' %}selected{% endif %}>🚚 Em Trânsito</option>
+                <option value="Entregue Parcialmente" {% if pedido.status_compra == 'Entregue Parcialmente' %}selected{% endif %}>📦 Entregue Parcialmente</option>
+                <option value="Entregue Totalmente" {% if pedido.status_compra == 'Entregue Totalmente' %}selected{% endif %}>✅ Entregue Totalmente</option>
             </select>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px;">
             <div>
+                <label>Item:</label><input type="text" name="item" value="{{ pedido.item_comprado }}" required style="background: #f9f9f9;">
+                <label>Fornecedor:</label><input type="text" name="fornecedor" value="{{ pedido.fornecedor }}" required style="background: #f9f9f9;">
+                <label>Categoria:</label><input type="text" name="categoria" value="{{ pedido.categoria or '' }}" placeholder="Ex: Rolamento">
+                
+                <hr style="margin: 20px 0;">
+
                 <label>Nº Solicitação:</label><input type="text" name="solicitacao" value="{{ pedido.numero_solicitacao }}" required>
                 <label>Nº Orçamento:</label><input type="text" name="orcamento" value="{{ pedido.numero_orcamento or '' }}">
-                <label>Nº Pedido:</label><input type="text" name="pedido" value="{{ pedido.numero_pedido or '' }}">
-                <label>Item:</label><input type="text" name="item" value="{{ pedido.item_comprado }}" required>
-                <label>Fornecedor:</label><input type="text" name="fornecedor" value="{{ pedido.fornecedor }}" required>
             </div>
+            
             <div>
-                <label>Data da Compra:</label><input type="date" name="data_compra" value="{{ pedido.data_compra or '' }}">
-                <label>Prazo de Entrega (Original):</label><input type="date" name="prazo" value="{{ pedido.prazo_entrega or '' }}">
-                <label>Data Reprogramada (Se houver atraso):</label><input type="date" name="reprogramada" value="{{ pedido.data_entrega_reprogramada or '' }}">
+                <label>Prazo Original:</label><input type="date" name="prazo" value="{{ pedido.prazo_entrega or '' }}">
+                <label style="color: #d35400;">Nova Data (se atrasou):</label><input type="date" name="reprogramada" value="{{ pedido.data_entrega_reprogramada or '' }}">
                 
-                <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
+                <hr style="margin: 20px 0;">
 
-                <label style="color: #2980b9;">Anexo (PDF/Foto):</label>
-                {% if pedido.arquivo_anexo %}
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
-                        <a href="{{ url_for('static', filename='uploads/' + pedido.arquivo_anexo) }}" target="_blank" style="font-weight: bold;">📎 Ver Atual</a>
-                        
-                        <a href="{{ url_for('excluir_anexo', id=pedido.id) }}" onclick="return confirm('Apagar apenas o arquivo anexo?')" style="text-decoration: none;">
-                            <span style="background: #e74c3c; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; cursor: pointer;">X Remover</span>
-                        </a>
-                    </div>
-                {% endif %}
-                <input type="file" name="arquivo">
-
-                <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
-
-                <label>Fiscal:</label><input type="text" name="nota" value="{{ pedido.nota_fiscal or '' }}">
+                <label>Nota Fiscal:</label><input type="text" name="nota" value="{{ pedido.nota_fiscal or '' }}">
                 <label>Série:</label><input type="text" name="serie" value="{{ pedido.serie_nota or '' }}">
+                
+            </div>
+            
+            <div style="grid-column: 1 / -1;">
+                <label>Comentários / Observações:</label>
+                <textarea name="observacao" rows="3" style="width: 100%; border: 2px solid #ccc; border-radius: 8px; padding: 10px; font-size: 1rem; margin-top: 8px;">{{ pedido.observacao or '' }}</textarea>
             </div>
         </div>
-        <button type="submit" style="width: 100%; margin-top: 30px; background: #27ae60;">Salvar Alterações</button>
+        
+        <div style="margin-top: 30px; background: #e8f5e9; padding: 15px; border-radius: 8px;">
+            <label style="margin-top: 0; color: var(--verde-sucesso);">Anexo Atual:</label>
+            {% if pedido.arquivo_anexo %}
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+                    <a href="{{ url_for('static', filename='uploads/' + pedido.arquivo_anexo) }}" target="_blank" style="font-weight: bold;">
+                        📄 Abrir Arquivo
+                    </a>
+                    <a href="#" onclick="return mostrarModal('{{ url_for('excluir_anexo', id=pedido.id) }}', 'anexo')" style="color: red; margin-left: auto; text-decoration: none;">
+                        🗑️ Apagar Anexo
+                    </a>
+                </div>
+            {% else %}
+                <p style="color: #666; font-style: italic;">Nenhum arquivo anexado.</p>
+            {% endif %}
+            
+            <label style="font-size: 0.9rem;">Trocar arquivo:</label>
+            <input type="file" name="arquivo">
+        </div>
+
+        <div style="display: flex; gap: 15px; margin-top: 30px;">
+            <a href="{{ url_for('dashboard') }}" style="flex: 1; text-decoration: none;">
+                <button type="button" style="background-color: #95a5a6; margin: 0;">Cancelar</button>
+            </a>
+            <button type="submit" style="flex: 2; background: var(--verde-sucesso); margin: 0;">
+                💾 Salvar Alterações
+            </button>
+        </div>
     </form>
 </div>
 {% endblock %}

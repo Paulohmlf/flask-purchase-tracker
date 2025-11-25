@@ -1,36 +1,43 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card">
-    <h2>Aprovação de Usuários Pendentes</h2>
-    <p>Os usuários abaixo se cadastraram mas ainda não podem acessar o sistema.</p>
+<div style="max-width: 800px; margin: 0 auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div>
+            <h2 style="margin-bottom: 5px; border: none;">🛡️ Área Administrativa</h2>
+            <p style="color: #666; font-size: 1.1rem;">Libere o acesso para novos usuários.</p>
+        </div>
+        <a href="{{ url_for('dashboard') }}">
+            <button style="width: auto; background-color: #6c757d; margin: 0;">⬅ Voltar</button>
+        </a>
+    </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Nome</th>
-                <th>Email</th>
-                <th>Ação</th>
-            </tr>
-        </thead>
-        <tbody>
+    {% if not pendentes %}
+        <div class="card" style="text-align: center; padding: 40px;">
+            <span class="material-icons" style="font-size: 4rem; color: var(--verde-sucesso);">check_circle</span>
+            <h3>Tudo limpo!</h3>
+            <p>Não há ninguém esperando aprovação no momento.</p>
+        </div>
+    {% else %}
+        <div style="display: grid; gap: 20px;">
             {% for user in pendentes %}
-            <tr>
-                <td>{{ user.nome_completo }}</td>
-                <td>{{ user.email }}</td>
-                <td>
-                    <form method="POST" style="margin:0;">
-                        <input type="hidden" name="user_id" value="{{ user.id }}">
-                        <button type="submit" style="background-color: #27ae60; margin:0; padding: 5px 15px;">Aprovar</button>
-                    </form>
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="3" style="text-align: center;">Nenhum usuário pendente de aprovação.</td>
-            </tr>
+            <div class="card" style="margin: 0; display: flex; flex-direction: column; border-left: 6px solid #f39c12;">
+                <div style="margin-bottom: 15px;">
+                    <h3 style="margin: 0; color: #333;">{{ user.nome_completo }}</h3>
+                    <p style="color: #666; margin: 5px 0; font-family: monospace; font-size: 1.1rem;">
+                        ✉ {{ user.email }}
+                    </p>
+                </div>
+                
+                <form method="POST" style="margin: 0;">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <button type="submit" style="background-color: var(--verde-sucesso); margin: 0; width: 100%;">
+                        ✅ Aprovar Entrada
+                    </button>
+                </form>
+            </div>
             {% endfor %}
-        </tbody>
-    </table>
+        </div>
+    {% endif %}
 </div>
 {% endblock %}

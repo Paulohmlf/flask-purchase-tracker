@@ -2,26 +2,40 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Compras - Nutrane</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 <body>
 
     <nav>
-        <div class="brand">Nutrane Compras</div>
-        <div>
-            {% if session.get('user_id') %}
-                <span>Olá, {{ session.get('user_name') }}</span>
-                <a href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a href="{{ url_for('nova_compra') }}">Novo Pedido</a>
-                {% if session.get('user_nivel') == 'admin' %}
-                    <a href="{{ url_for('admin_usuarios') }}" style="color: #f1c40f;">Aprovar Usuários</a>
+        <div class="container nav-container">
+            <div class="brand">
+                <span class="material-icons" style="font-size: 1.5rem; vertical-align: middle;">inventory_2</span>
+                Nutrane Compras
+            </div>
+            
+            <div class="nav-links">
+                {% if session.get('user_id') %}
+                    <a href="{{ url_for('dashboard') }}" class="nav-item">
+                        <span class="material-icons">dashboard</span>
+                        <span>Início</span>
+                    </a>
+                    
+                    <a href="{{ url_for('nova_compra') }}" class="nav-item destaque">
+                        <span class="material-icons">add_circle</span>
+                        <span>Novo Pedido</span>
+                    </a>
+
+                    <a href="{{ url_for('logout') }}" class="nav-item sair">
+                        <span class="material-icons">logout</span>
+                        <span>Sair</span>
+                    </a>
+                {% else %}
+                    <a href="{{ url_for('login') }}" class="nav-item">Entrar</a>
                 {% endif %}
-                <a href="{{ url_for('logout') }}">Sair</a>
-            {% else %}
-                <a href="{{ url_for('login') }}">Entrar</a>
-                <a href="{{ url_for('registro') }}">Cadastrar-se</a>
-            {% endif %}
+            </div>
         </div>
     </nav>
 
@@ -29,7 +43,10 @@
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 {% for message in messages %}
-                    <div class="flash">{{ message }}</div>
+                    <div class="flash">
+                        <span class="material-icons" style="margin-right: 10px;">info</span>
+                        {{ message }}
+                    </div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
@@ -37,5 +54,46 @@
         {% block content %}{% endblock %}
     </div>
 
+    <div id="confirmModal" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center;">
+        <div class="card" style="width: 100%; max-width: 450px; padding: 30px; text-align: center;">
+            <h3 style="color: var(--vermelho-erro); margin-top: 0; border-bottom: 2px solid #eee; padding-bottom: 15px;">
+                ⚠️ Confirmação Necessária
+            </h3>
+            <p id="modalMessage" style="font-size: 1.2rem; margin-bottom: 30px;">
+                Tem certeza que deseja APAGAR este item? Esta ação não pode ser desfeita.
+            </p>
+            <div style="display: flex; gap: 15px;">
+                <button id="cancelButton" type="button" style="flex: 1; margin: 0; background-color: #95a5a6;" onclick="esconderModal()">
+                    Não, Cancelar
+                </button>
+                <a href="#" id="confirmLink" style="flex: 1; text-decoration: none;">
+                    <button style="margin: 0; background-color: var(--vermelho-erro); font-size: 1.2rem;">
+                        Sim, APAGAR Agora
+                    </button>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Função chamada pelos links de exclusão em todas as páginas
+        function mostrarModal(url, tipo = 'pedido') {
+            document.getElementById('confirmLink').href = url;
+            
+            if (tipo === 'anexo') {
+                document.getElementById('modalMessage').innerHTML = 'Tem certeza que deseja APAGAR o ANEXO? Ele será removido permanentemente.';
+            } else {
+                document.getElementById('modalMessage').innerHTML = 'Tem certeza que deseja APAGAR este PEDIDO inteiro? Esta ação não pode ser desfeita.';
+            }
+            
+            document.getElementById('confirmModal').style.display = 'flex';
+            document.getElementById('cancelButton').focus(); // Foca no Cancelar
+            return false;
+        }
+        
+        function esconderModal() {
+            document.getElementById('confirmModal').style.display = 'none';
+        }
+    </script>
 </body>
 </html>

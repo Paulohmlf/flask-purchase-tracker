@@ -1,19 +1,75 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card" style="max-width: 400px; margin: 0 auto;">
-    <h2>Criar Nova Conta</h2>
-    <form method="POST">
-        <label>Nome Completo:</label>
-        <input type="text" name="nome" required>
+<div style="display: flex; justify-content: center; align-items: flex-start; min-height: 80vh;">
+    
+    <div class="card" style="width: 100%; max-width: 600px;">
+        <h2>📝 Criar sua conta</h2>
+        
+        <p style="font-size: 1.1rem; margin-bottom: 25px;">
+            Preencha os dados abaixo para se cadastrar no sistema. É rápido.
+        </p>
 
-        <label>Email:</label>
-        <input type="email" name="email" required>
+        <form method="POST">
+            <div>
+                <label for="nome">Qual é o seu nome completo?</label>
+                <input 
+                    type="text" 
+                    id="nome" 
+                    name="nome" 
+                    required 
+                    placeholder="Ex: Maria da Silva"
+                    autocomplete="name"
+                >
+            </div>
 
-        <label>Senha (mínimo 6 dígitos):</label>
-        <input type="password" name="senha" required minlength="6">
+            <div style="margin-top: 25px;">
+                <label for="email">Seu melhor e-mail:</label>
+                <input 
+                    type="email" 
+                    id="email" 
+                    name="email" 
+                    required 
+                    placeholder="Ex: maria@gmail.com"
+                    autocomplete="email"
+                    style="font-family: monospace;"
+                >
+                <span class="ajuda-campo">Você vai usar este e-mail para entrar no sistema depois.</span>
+            </div>
 
-        <button type="submit">Cadastrar</button>
-    </form>
+            <hr style="margin: 30px 0; border: 0; border-top: 1px solid #eee;">
+
+            <div>
+                <label for="senha">Crie uma senha segura:</label>
+                <input 
+                    type="password" 
+                    id="senha" 
+                    name="senha" 
+                    required 
+                    minlength="6"
+                    placeholder="******"
+                    autocomplete="new-password"
+                >
+                
+                <div style="background-color: #e9ecef; padding: 15px; border-radius: 8px; margin-top: 10px;">
+                    <p style="margin: 0 0 5px 0; font-weight: bold; font-size: 0.9rem;">Sua senha precisa ter:</p>
+                    <ul style="margin: 0; padding-left: 20px; color: #555; font-size: 0.9rem;">
+                        <li>Pelo menos 6 letras ou números.</li>
+                        <li>Não use senhas fáceis como "123456".</li>
+                    </ul>
+                </div>
+            </div>
+
+            <button type="submit" style="background-color: var(--verde-sucesso);">
+                ✅ Confirmar Cadastro
+            </button>
+        </form>
+
+        <div style="text-align: center; margin-top: 30px;">
+            <a href="{{ url_for('login') }}" style="color: #666; font-size: 1rem;">
+                Já tem conta? <strong>Voltar para o Login</strong>
+            </a>
+        </div>
+    </div>
 </div>
 {% endblock %}

@@ -1,87 +1,116 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card" style="max-width: 800px; margin: 0 auto;">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h2>Lançar Nova Compra</h2>
-        <a href="{{ url_for('dashboard') }}" style="color: #e74c3c; text-decoration: none;">Cancelar</a>
+<div class="card" style="max-width: 800px; margin: 0 auto; border-top: 6px solid var(--azul-acao);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0; border: none;">🛒 Lançar Nova Compra</h2>
+        <a href="{{ url_for('dashboard') }}" style="color: #e74c3c; font-weight: bold; font-size: 1.1rem; text-decoration: none;">
+            ✖ Cancelar
+        </a>
     </div>
 
+    <p style="margin-bottom: 30px; color: #666;">Preencha as informações abaixo em 3 passos simples.</p>
+
     <form method="POST" enctype="multipart/form-data">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #e9ecef;">
+            <h3 style="color: var(--azul-acao); margin-top: 0;">1. O que você está comprando?</h3>
             
-            <div>
-                <label>Nº Solicitação:</label>
-                <input type="text" name="solicitacao" required placeholder="Ex: 12345">
+            <label>Item Comprado (O que é?):</label>
+            <input type="text" name="item" required placeholder="Ex: Computador Dell, Cadeira..." style="font-weight: bold;">
 
-                <label>Nº Orçamento:</label>
-                <input type="text" name="orcamento" placeholder="Ex: ORC-2023/500">
+            <label>Fornecedor (Quem vende?):</label>
+            <input type="text" name="fornecedor" required placeholder="Ex: Kabum, Loja do Zé...">
+            
+            <label>Categoria (Peças, Serviço, Material de Escritório...):</label>
+            <input type="text" name="categoria" placeholder="Ex: Rolamento, Correia, TI">
 
-                <label>Nº Pedido:</label>
-                <input type="text" name="pedido" placeholder="Ex: PED-999">
+            <label>Para qual Unidade?</label>
+            <select name="empresa" required style="height: 60px; font-size: 1.1rem;">
+                <option value="" disabled selected>⬇ Toque para selecionar a Loja</option>
+                {% for emp in empresas %}
+                    <option value="{{ emp.codi_empresa }}">{{ emp.nome_empresa }}</option>
+                {% endfor %}
+            </select>
+        </div>
 
-                <label>Item Comprado:</label>
-                <input type="text" name="item" required placeholder="Ex: Computador Dell">
-                
-                <label>Fornecedor:</label>
-                <input type="text" name="fornecedor" required placeholder="Ex: Kabum">
+        <div style="background-color: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #cfe2ff;">
+            <h3 style="color: #004085; margin-top: 0;">2. Números e Prazos</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+                <div>
+                    <label>Nº Solicitação (Obrigatório):</label>
+                    <input type="text" name="solicitacao" required placeholder="12345">
+                </div>
+                <div>
+                    <label>Nº Orçamento (Opcional):</label>
+                    <input type="text" name="orcamento">
+                </div>
+                <div>
+                    <label>Data da Compra:</label>
+                    <input type="date" name="data_compra">
+                </div>
+                <div>
+                    <label>Prazo de Entrega (Previsão):</label>
+                    <input type="date" name="prazo">
+                </div>
+            </div>
+            
+            <label>Comentários/Observações (Detalhes importantes):</label>
+            <textarea name="observacao" rows="3" style="width: 100%; border: 2px solid #ccc; border-radius: 8px; padding: 10px; font-size: 1rem; margin-top: 8px;"></textarea>
 
-                <label>Empresa:</label>
-                <select name="empresa" required>
-                    <option value="" disabled selected>-- Selecione a Loja --</option>
-                    {% for emp in empresas %}
-                        <option value="{{ emp.codi_empresa }}">{{ emp.nome_empresa }}</option>
+        </div>
+
+        <div style="background-color: #fff8e1; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #ffeeba;">
+            <h3 style="color: #856404; margin-top: 0;">3. Arquivo e Responsáveis</h3>
+
+            <label style="display: block; margin-bottom: 10px;">Tem anexo? (PDF ou Foto)</label>
+            <label for="arquivo" style="border: 2px dashed #999; background: white; padding: 20px; text-align: center; border-radius: 8px; cursor: pointer; display: block; margin-top: 0;">
+                <span class="material-icons" style="font-size: 2rem; color: var(--azul-acao); display: block;">cloud_upload</span>
+                <span id="texto-arquivo" style="font-size: 1.1rem; color: #555;">Toque aqui para escolher o arquivo</span>
+            </label>
+            <input type="file" id="arquivo" name="arquivo" accept=".pdf,.jpg,.jpeg,.png" style="display: none;" onchange="mostrarNomeArquivo()">
+            <span class="ajuda-campo">Arquivos permitidos: PDF, JPG, PNG.</span>
+
+            <div style="margin-top: 20px;">
+                <label>Quem é o Comprador responsável?</label>
+                <select name="resp_comprador">
+                    <option value="">-- Selecione o Comprador --</option>
+                    {% for u in usuarios %}
+                        <option value="{{ u.id }}">{{ u.nome_completo }}</option>
                     {% endfor %}
                 </select>
+                <span class="ajuda-campo">O responsável por fazer a compra.</span>
             </div>
 
-            <div>
-                <label>Data da Compra:</label>
-                <input type="date" name="data_compra">
-
-                <label>Prazo de Entrega (Previsão):</label>
-                <input type="date" name="prazo">
-                
-                <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
-
-                <label style="color: #2980b9;">Anexar Arquivo (PDF/Foto):</label>
-                <input type="file" name="arquivo" accept=".pdf,.jpg,.jpeg,.png">
-
-                <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
-
-                <label>Nota Fiscal:</label>
-                <input type="text" name="nota">
-
-                <label>Série:</label>
-                <input type="text" name="serie">
-                
-                <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
-
-                <label>Responsáveis:</label>
-                <select name="resp_comprador">
-                    <option value="">-- Comprador Responsável --</option>
-                    {% for u in usuarios %}
-                        <option value="{{ u.id }}">{{ u.nome_completo }}</option>
-                    {% endfor %}
-                </select>
-                
-                <select name="resp_chamado" style="margin-top: 10px;">
-                    <option value="">-- Resp. pelo Chamado --</option>
-                    {% for u in usuarios %}
-                        <option value="{{ u.id }}">{{ u.nome_completo }}</option>
-                    {% endfor %}
-                </select>
-
-                <label style="margin-top: 15px;">Status Inicial:</label>
-                <select name="status" style="font-weight: bold;">
-                    <option value="Aguardando Aprovação">Aguardando Aprovação</option>
-                    <option value="Enviado ao Fornecedor">Enviado ao Fornecedor</option>
-                    <option value="Confirmado">Confirmado</option>
+            <div style="margin-top: 20px;">
+                <label>Situação Inicial:</label>
+                <select name="status" style="font-weight: bold; color: #333;">
+                    <option value="Aguardando Aprovação">🟡 Aguardando Aprovação</option>
+                    <option value="Enviado ao Fornecedor">🔵 Enviado ao Fornecedor</option>
+                    <option value="Confirmado">🟢 Confirmado</option>
                 </select>
             </div>
         </div>
 
-        <button type="submit" style="width: 100%; margin-top: 30px; background-color: #2980b9;">Salvar Pedido</button>
+        <button type="submit" style="background-color: var(--verde-sucesso); font-size: 1.4rem; padding: 20px;">
+            💾 Salvar Pedido
+        </button>
     </form>
 </div>
+
+<script>
+    // Lógica para dar feedback visual sobre o arquivo escolhido
+    function mostrarNomeArquivo() {
+        var input = document.getElementById('arquivo');
+        var texto = document.getElementById('texto-arquivo');
+        if (input.files && input.files.length > 0) {
+            texto.innerText = "✅ Arquivo selecionado: " + input.files[0].name;
+            texto.style.fontWeight = "bold";
+            texto.style.color = "var(--verde-sucesso)";
+            texto.parentElement.style.borderColor = "var(--verde-sucesso)";
+            texto.parentElement.style.backgroundColor = "#e8f5e9";
+        }
+    }
+</script>
 {% endblock %}
