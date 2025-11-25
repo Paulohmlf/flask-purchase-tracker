@@ -233,22 +233,106 @@ def dashboard():
                            # NOVO GRÁFICO DE LINHA DO TEMPO
                            graf_timeline={'labels': labels_timeline, 'values': values_timeline})
 
-# --- ROTAS DE CRIAÇÃO/EDIÇÃO (MANTIDAS IGUAIS) ---
+# --- ROTAS DE CRIAÇÃO/EDIÇÃO ---
 @app.route('/nova_compra', methods=['GET', 'POST'])
 def nova_compra():
-    if 'user_id' not in session: return redirect(url_for('login'))
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
     conn = get_db_connection()
+    empresas = conn.execute('SELECT * FROM empresas_compras').fetchall()
+    usuarios = conn.execute('SELECT * FROM usuarios WHERE aprovado = 1').fetchall()
+    
+    # Dicionário para manter os dados no formulário em caso de erro
+    dados_form = {}
+    
     if request.method == 'POST':
-        f = request.form; arq = request.files.get('arquivo'); nome_arq = None
+        f = request.form
+        dados_form = f # Salva o formulário para passar de volta
+        
+        # --- VALIDAÇÃO DE ACESSIBILIDADE E PREVENÇÃO DE ERROS ---
+        erros = []
+        
+        # 1. Campos obrigatórios (item, fornecedor, solicitacao, empresa)
+        # Note: Estamos usando f.get() aqui, mas validando que o valor não seja None/Vazio.
+        if not f.get('item'): erros.append("O item a ser comprado (O que é?) é obrigatório.")
+        if not f.get('fornecedor'): erros.append("O Fornecedor (Quem vende?) é obrigatório.")
+        if not f.get('solicitacao'): erros.append("O Número da Solicitação é obrigatório.")
+        if not f.get('empresa'): erros.append("A Unidade (Loja) solicitante é obrigatória. Por favor, selecione uma.")
+        
+        # 2. Validação de Datas
+        data_compra_str = f.get('data_compra')
+        prazo_str = f.get('prazo')
+        
+        data_compra_obj = None
+        prazo_obj = None
+        hoje = date.today()
+        
+        # Tenta converter e validar a Data da Compra
+        if data_compra_str:
+            try:
+                data_compra_obj = datetime.strptime(data_compra_str, '%Y-%m-%d').date()
+                if data_compra_obj > hoje:
+                    erros.append("A Data da Compra não pode ser uma data futura. Corrija este campo.")
+            except ValueError:
+                erros.append("Formato da Data da Compra é inválido. Tente novamente.")
+
+        # Tenta converter o Prazo de Entrega
+        if prazo_str:
+            try:
+                prazo_obj = datetime.strptime(prazo_str, '%Y-%m-%d').date()
+            except ValueError:
+                erros.append("Formato do Prazo de Entrega é inválido. Tente novamente.")
+            
+        # 3. Validação de Lógica Temporal
+        if data_compra_obj and prazo_obj:
+            if prazo_obj < data_compra_obj:
+                erros.append("O Prazo de Entrega não pode ser anterior à Data da Compra. Por favor, ajuste as datas.")
+        
+        # --- SE HOUVER ERROS, RETORNA E MANTÉM OS DADOS ---
+        if erros:
+            for erro in erros:
+                flash(f'🚨 ATENÇÃO: {erro}')
+            
+            # Recarrega a página passando os dados atuais do formulário
+            conn.close()
+            return render_template('nova_compra.html', 
+                                   empresas=empresas, 
+                                   usuarios=usuarios, 
+                                   dados_form=dados_form) # Passa os dados preenchidos
+
+        # --- SE NÃO HOUVER ERROS, PROSSEGUE COM UPLOAD E DB ---
+        
+        # Lógica de Upload de Arquivo
+        arq = request.files.get('arquivo')
+        nome_arq = None
         if arq and allowed_file(arq.filename):
             nome_arq = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{arq.filename}")
             arq.save(os.path.join(app.config['UPLOAD_FOLDER'], nome_arq))
-        conn.execute('''INSERT INTO acompanhamento_compras (numero_solicitacao, numero_orcamento, numero_pedido, item_comprado, categoria, fornecedor, data_compra, nota_fiscal, serie_nota, arquivo_anexo, observacao, codi_empresa, id_responsavel_chamado, id_comprador_responsavel, prazo_entrega, status_compra) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', 
-                     (f['solicitacao'], f['orcamento'], f['pedido'], f['item'], f.get('categoria'), f['fornecedor'], f['data_compra'] or None, f['nota'], f['serie'], nome_arq, f.get('observacao'), f['empresa'], f['resp_chamado'], f['resp_comprador'], f['prazo'] or None, f['status']))
-        conn.commit(); conn.close(); return redirect(url_for('dashboard'))
-    empresas = conn.execute('SELECT * FROM empresas_compras').fetchall()
-    usuarios = conn.execute('SELECT * FROM usuarios WHERE aprovado = 1').fetchall()
-    conn.close(); return render_template('nova_compra.html', empresas=empresas, usuarios=usuarios)
+            
+        # Inserção no Banco de Dados: Usando f.get() para todos os campos opcionais.
+        conn.execute('''
+            INSERT INTO acompanhamento_compras (
+                numero_solicitacao, numero_orcamento, numero_pedido, item_comprado, categoria, 
+                fornecedor, data_compra, nota_fiscal, serie_nota, arquivo_anexo, 
+                observacao, codi_empresa, id_responsavel_chamado, id_comprador_responsavel, 
+                prazo_entrega, status_compra
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ''', (
+            f.get('solicitacao'), f.get('orcamento'), f.get('pedido'), f.get('item'), f.get('categoria'), 
+            f.get('fornecedor'), f.get('data_compra') or None, f.get('nota'), f.get('serie'), nome_arq, 
+            f.get('observacao'), f.get('empresa'), f.get('resp_chamado') or None, f.get('resp_comprador') or None, 
+            f.get('prazo') or None, f.get('status')
+        ))
+        conn.commit()
+        conn.close()
+        flash('✅ Pedido de Compra registrado com sucesso!')
+        return redirect(url_for('dashboard'))
+
+    # Caso GET (Primeira entrada na página)
+    conn.close()
+    # Passa um dict vazio para que o template não quebre ao tentar acessar 'dados_form'
+    return render_template('nova_compra.html', empresas=empresas, usuarios=usuarios, dados_form={})
 
 @app.route('/editar_pedido/<int:id>', methods=['GET', 'POST'])
 def editar_pedido(id):
@@ -259,8 +343,11 @@ def editar_pedido(id):
         if arq and allowed_file(arq.filename):
             nome_arq = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{arq.filename}")
             arq.save(os.path.join(app.config['UPLOAD_FOLDER'], nome_arq))
+            
+        # CORREÇÃO CRÍTICA: Usando f.get() para todos os campos opcionais
         conn.execute('''UPDATE acompanhamento_compras SET numero_solicitacao=?, numero_orcamento=?, numero_pedido=?, item_comprado=?, categoria=?, fornecedor=?, data_compra=?, prazo_entrega=?, data_entrega_reprogramada=?, nota_fiscal=?, serie_nota=?, status_compra=?, arquivo_anexo=?, observacao=? WHERE id=?''', 
-                     (f['solicitacao'], f['orcamento'], f['pedido'], f['item'], f.get('categoria'), f['fornecedor'], f['data_compra'] or None, f['prazo'] or None, f['reprogramada'] or None, f['nota'], f['serie'], f['status'], nome_arq, f.get('observacao'), id))
+                     (f['solicitacao'], f.get('orcamento'), f.get('pedido'), f['item'], f.get('categoria'), f['fornecedor'], f.get('data_compra') or None, f.get('prazo') or None, f.get('reprogramada') or None, f.get('nota'), f.get('serie'), f['status'], nome_arq, f.get('observacao'), id))
+        
         conn.commit(); conn.close(); return redirect(url_for('dashboard'))
     return render_template('editar_pedido.html', pedido=pedido)
 

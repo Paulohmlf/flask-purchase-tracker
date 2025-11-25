@@ -17,19 +17,25 @@
             <h3 style="color: var(--azul-acao); margin-top: 0;">1. O que você está comprando?</h3>
             
             <label>Item Comprado (O que é?):</label>
-            <input type="text" name="item" required placeholder="Ex: Computador Dell, Cadeira..." style="font-weight: bold;">
+            <input type="text" name="item" required placeholder="Ex: Computador Dell, Cadeira..." style="font-weight: bold;"
+                value="{{ dados_form.get('item', '') }}">
 
             <label>Fornecedor (Quem vende?):</label>
-            <input type="text" name="fornecedor" required placeholder="Ex: Kabum, Loja do Zé...">
+            <input type="text" name="fornecedor" required placeholder="Ex: Kabum, Loja do Zé..."
+                value="{{ dados_form.get('fornecedor', '') }}">
             
             <label>Categoria (Peças, Serviço, Material de Escritório...):</label>
-            <input type="text" name="categoria" placeholder="Ex: Rolamento, Correia, TI">
+            <input type="text" name="categoria" placeholder="Ex: Rolamento, Correia, TI"
+                value="{{ dados_form.get('categoria', '') }}">
 
             <label>Para qual Unidade?</label>
             <select name="empresa" required style="height: 60px; font-size: 1.1rem;">
-                <option value="" disabled selected>⬇ Toque para selecionar a Loja</option>
+                <option value="" disabled {% if not dados_form.get('empresa') %}selected{% endif %}>⬇ Toque para selecionar a Loja</option>
                 {% for emp in empresas %}
-                    <option value="{{ emp.codi_empresa }}">{{ emp.nome_empresa }}</option>
+                    <option value="{{ emp.codi_empresa }}" 
+                        {% if dados_form.get('empresa')|string == emp.codi_empresa|string %}selected{% endif %}>
+                        {{ emp.nome_empresa }}
+                    </option>
                 {% endfor %}
             </select>
         </div>
@@ -40,24 +46,34 @@
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
                 <div>
                     <label>Nº Solicitação (Obrigatório):</label>
-                    <input type="text" name="solicitacao" required placeholder="12345">
+                    <input type="text" name="solicitacao" required placeholder="12345"
+                        value="{{ dados_form.get('solicitacao', '') }}">
                 </div>
                 <div>
                     <label>Nº Orçamento (Opcional):</label>
-                    <input type="text" name="orcamento">
+                    <input type="text" name="orcamento"
+                        value="{{ dados_form.get('orcamento', '') }}">
                 </div>
                 <div>
+                    <label>Nº Pedido (Opcional):</label>
+                    <input type="text" name="pedido" placeholder="Ex: PED-999"
+                        value="{{ dados_form.get('pedido', '') }}">
+                </div>
+                
+                <div>
                     <label>Data da Compra:</label>
-                    <input type="date" name="data_compra">
+                    <input type="date" name="data_compra"
+                        value="{{ dados_form.get('data_compra', '') }}">
                 </div>
                 <div>
                     <label>Prazo de Entrega (Previsão):</label>
-                    <input type="date" name="prazo">
+                    <input type="date" name="prazo"
+                        value="{{ dados_form.get('prazo', '') }}">
                 </div>
             </div>
             
             <label>Comentários/Observações (Detalhes importantes):</label>
-            <textarea name="observacao" rows="3" style="width: 100%; border: 2px solid #ccc; border-radius: 8px; padding: 10px; font-size: 1rem; margin-top: 8px;"></textarea>
+            <textarea name="observacao" rows="3" style="width: 100%; border: 2px solid #ccc; border-radius: 8px; padding: 10px; font-size: 1rem; margin-top: 8px;">{{ dados_form.get('observacao', '') }}</textarea>
 
         </div>
 
@@ -77,18 +93,33 @@
                 <select name="resp_comprador">
                     <option value="">-- Selecione o Comprador --</option>
                     {% for u in usuarios %}
-                        <option value="{{ u.id }}">{{ u.nome_completo }}</option>
+                        <option value="{{ u.id }}" {% if dados_form.get('resp_comprador')|string == u.id|string %}selected{% endif %}>
+                            {{ u.nome_completo }}
+                        </option>
                     {% endfor %}
                 </select>
                 <span class="ajuda-campo">O responsável por fazer a compra.</span>
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <label>Responsável pelo Chamado (Opcional):</label>
+                <select name="resp_chamado">
+                    <option value="">-- Selecione o Solicitante --</option>
+                    {% for u in usuarios %}
+                        <option value="{{ u.id }}" {% if dados_form.get('resp_chamado')|string == u.id|string %}selected{% endif %}>
+                            {{ u.nome_completo }}
+                        </option>
+                    {% endfor %}
+                </select>
+                <span class="ajuda-campo">Quem abriu a solicitação de compra.</span>
             </div>
 
             <div style="margin-top: 20px;">
                 <label>Situação Inicial:</label>
                 <select name="status" style="font-weight: bold; color: #333;">
-                    <option value="Aguardando Aprovação">🟡 Aguardando Aprovação</option>
-                    <option value="Enviado ao Fornecedor">🔵 Enviado ao Fornecedor</option>
-                    <option value="Confirmado">🟢 Confirmado</option>
+                    <option value="Aguardando Aprovação" {% if dados_form.get('status') == 'Aguardando Aprovação' %}selected{% endif %}>🟡 Aguardando Aprovação</option>
+                    <option value="Enviado ao Fornecedor" {% if dados_form.get('status') == 'Enviado ao Fornecedor' %}selected{% endif %}>🔵 Enviado ao Fornecedor</option>
+                    <option value="Confirmado" {% if dados_form.get('status') == 'Confirmado' %}selected{% endif %}>🟢 Confirmado</option>
                 </select>
             </div>
         </div>
