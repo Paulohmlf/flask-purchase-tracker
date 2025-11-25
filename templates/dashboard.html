@@ -93,6 +93,13 @@
                 <canvas id="chartComp" style="max-height: 250px;"></canvas>
             </div>
         </div>
+
+        <div style="background: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 8px; margin-top: 20px;">
+            <h3 style="text-align: center; color: #555;">Previsão de Entregas (Próximas Semanas)</h3>
+            <div style="height: 300px;">
+                <canvas id="chartTimeline"></canvas>
+            </div>
+        </div>
     </div>
 
     <div id="aba-operacional" style="display: none;">
@@ -186,14 +193,12 @@
         }
     }
 
-    // 2. GRÁFICOS (CORRIGIDO: SEM JSON.PARSE)
+    // 2. GRÁFICOS (Renderização segura)
     document.addEventListener("DOMContentLoaded", function() {
         try {
             if (typeof Chart === 'undefined') return;
 
-            // AQUI ESTÁ A CORREÇÃO:
-            // Removemos o JSON.parse() porque o 'tojson' do Jinja já entrega o formato pronto.
-            
+            // Dados do Python (usando filtro | tojson para formato correto)
             const statusData = { 
                 labels: {{ graf_status['labels'] | tojson }}, 
                 datasets: [{ data: {{ graf_status['values'] | tojson }}, backgroundColor: ['#3498db', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6'] }] 
@@ -209,11 +214,37 @@
                 datasets: [{ label: 'Carteira de Pedidos', data: {{ graf_comp['values'] | tojson }}, backgroundColor: '#9b59b6' }] 
             };
 
+            // Dados da Linha do Tempo
+            const timelineData = {
+                labels: {{ graf_timeline['labels'] | tojson }},
+                datasets: [{
+                    label: 'Entregas Previstas (Semanal)',
+                    data: {{ graf_timeline['values'] | tojson }},
+                    borderColor: '#27ae60',
+                    backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                    borderWidth: 3,
+                    tension: 0.3,
+                    fill: true
+                }]
+            };
+
+            // Renderizando
             new Chart(document.getElementById('chartStatus'), { type: 'doughnut', data: statusData });
             new Chart(document.getElementById('chartForn'), { type: 'bar', data: fornData });
             new Chart(document.getElementById('chartComp'), { type: 'bar', data: compData });
+            
+            // Renderizando Linha do Tempo
+            new Chart(document.getElementById('chartTimeline'), {
+                type: 'line',
+                data: timelineData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
+            });
 
-        } catch (error) { console.error("Erro gráficos:", error); }
+        } catch (error) { console.error("Erro ao gerar gráficos:", error); }
     });
 </script>
 {% endblock %}
