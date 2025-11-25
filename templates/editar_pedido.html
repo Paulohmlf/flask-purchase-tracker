@@ -76,22 +76,33 @@
         </div>
         
         <div style="margin-top: 30px; background: #e8f5e9; padding: 15px; border-radius: 8px;">
-            <label style="margin-top: 0; color: var(--verde-sucesso);">Anexo Atual:</label>
-            {% if pedido.arquivo_anexo %}
-                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
-                    <a href="{{ url_for('static', filename='uploads/' + pedido.arquivo_anexo) }}" target="_blank" style="font-weight: bold;">
-                        📄 Abrir Arquivo
-                    </a>
-                    <a href="#" onclick="return mostrarModal('{{ url_for('excluir_anexo', id=pedido.id) }}', 'anexo')" style="color: red; margin-left: auto; text-decoration: none;">
-                        🗑️ Apagar Anexo
-                    </a>
+            <label style="margin-top: 0; color: var(--verde-sucesso);">Anexos Atuais ({{ anexos|length }}):</label>
+
+            {% if anexos %}
+                <div style="margin-bottom: 15px; border: 1px solid #c8e6c9; padding: 10px; background: #f0fff0; border-radius: 6px;">
+                    {% for anexo in anexos %}
+                        <div style="display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 5px 0; border-bottom: 1px dashed #ddd;">
+                            <a href="{{ url_for('static', filename='uploads/' + anexo.nome_arquivo) }}" target="_blank" style="font-weight: bold; font-size: 0.95rem;">
+                                📄 {{ anexo.nome_original }}
+                            </a>
+                            <a href="#" onclick="return mostrarModal('{{ url_for('excluir_anexo', anexo_id=anexo.id) }}', 'anexo')" style="color: red; text-decoration: none; font-size: 0.9rem;">
+                                🗑️ Apagar
+                            </a>
+                        </div>
+                    {% endfor %}
                 </div>
             {% else %}
-                <p style="color: #666; font-style: italic;">Nenhum arquivo anexado.</p>
+                <p style="color: #666; font-style: italic;">Nenhum arquivo anexado ainda.</p>
             {% endif %}
             
-            <label style="font-size: 0.9rem;">Trocar arquivo:</label>
-            <input type="file" name="arquivo">
+            <label for="arquivo" style="display: block; margin-bottom: 10px;">Adicionar novo(s) arquivo(s):</label>
+            <label for="arquivo" style="border: 2px dashed #999; background: white; padding: 20px; text-align: center; border-radius: 8px; cursor: pointer; display: block; margin-top: 0;">
+                <span class="material-icons" style="font-size: 2rem; color: var(--azul-acao); display: block;">add_circle</span>
+                <span id="texto-arquivo-edit" style="font-size: 1.1rem; color: #555;">Toque aqui para escolher novos arquivos</span>
+            </label>
+            <input type="file" id="arquivo" name="arquivo" accept=".pdf,.jpg,.jpeg,.png" multiple style="display: none;" onchange="mostrarNomeArquivoEdit()">
+            <span class="ajuda-campo">Você pode selecionar um ou mais arquivos de uma vez.</span>
+
         </div>
 
         <div style="display: flex; gap: 15px; margin-top: 30px;">
@@ -104,4 +115,26 @@
         </div>
     </form>
 </div>
+
+<script>
+    // Lógica para dar feedback visual sobre a contagem de arquivos para a EDIÇÃO
+    function mostrarNomeArquivoEdit() {
+        var input = document.getElementById('arquivo');
+        var texto = document.getElementById('texto-arquivo-edit');
+        if (input.files && input.files.length > 0) {
+            var count = input.files.length;
+            texto.innerText = "✅ " + count + " novo(s) arquivo(s) pronto(s) para upload";
+            texto.style.fontWeight = "bold";
+            texto.style.color = "var(--verde-sucesso)";
+            texto.parentElement.style.borderColor = "var(--verde-sucesso)";
+            texto.parentElement.style.backgroundColor = "#e8f5e9";
+        } else {
+             texto.innerText = "Toque aqui para escolher novos arquivos";
+             texto.style.fontWeight = "";
+             texto.style.color = "#555";
+             texto.parentElement.style.borderColor = "#999";
+             texto.parentElement.style.backgroundColor = "white";
+        }
+    }
+</script>
 {% endblock %}

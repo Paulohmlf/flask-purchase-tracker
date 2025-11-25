@@ -83,10 +83,10 @@
             <label style="display: block; margin-bottom: 10px;">Tem anexo? (PDF ou Foto)</label>
             <label for="arquivo" style="border: 2px dashed #999; background: white; padding: 20px; text-align: center; border-radius: 8px; cursor: pointer; display: block; margin-top: 0;">
                 <span class="material-icons" style="font-size: 2rem; color: var(--azul-acao); display: block;">cloud_upload</span>
-                <span id="texto-arquivo" style="font-size: 1.1rem; color: #555;">Toque aqui para escolher o arquivo</span>
+                <span id="texto-arquivo" style="font-size: 1.1rem; color: #555;">Toque aqui para escolher o(s) arquivo(s)</span>
             </label>
-            <input type="file" id="arquivo" name="arquivo" accept=".pdf,.jpg,.jpeg,.png" style="display: none;" onchange="mostrarNomeArquivo()">
-            <span class="ajuda-campo">Arquivos permitidos: PDF, JPG, PNG.</span>
+            <input type="file" id="arquivo" name="arquivo" accept=".pdf,.jpg,.jpeg,.png" multiple style="display: none;" onchange="mostrarNomeArquivo()">
+            <span class="ajuda-campo">Você pode selecionar mais de um arquivo (PDF, JPG, PNG).</span>
 
             <div style="margin-top: 20px;">
                 <label>Quem é o Comprador responsável?</label>
@@ -131,16 +131,23 @@
 </div>
 
 <script>
-    // Lógica para dar feedback visual sobre o arquivo escolhido
+    // Lógica para dar feedback visual sobre a contagem de arquivos escolhidos
     function mostrarNomeArquivo() {
         var input = document.getElementById('arquivo');
         var texto = document.getElementById('texto-arquivo');
         if (input.files && input.files.length > 0) {
-            texto.innerText = "✅ Arquivo selecionado: " + input.files[0].name;
+            var count = input.files.length;
+            texto.innerText = "✅ " + count + " arquivo(s) selecionado(s)";
             texto.style.fontWeight = "bold";
             texto.style.color = "var(--verde-sucesso)";
             texto.parentElement.style.borderColor = "var(--verde-sucesso)";
             texto.parentElement.style.backgroundColor = "#e8f5e9";
+        } else {
+             texto.innerText = "Toque aqui para escolher o(s) arquivo(s)";
+             texto.style.fontWeight = "";
+             texto.style.color = "#555";
+             texto.parentElement.style.borderColor = "#999";
+             texto.parentElement.style.backgroundColor = "white";
         }
     }
 </script>

@@ -5,7 +5,7 @@ def criar_banco():
     connection = sqlite3.connect('database.db')
     cursor = connection.cursor()
     
-    # 1. Usuários
+    # 1. Usuários (Inalterado)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -17,7 +17,7 @@ def criar_banco():
     )
     ''')
 
-    # 2. Empresas (Lojas/Unidades)
+    # 2. Empresas (Inalterado, com as empresas do CSV)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS empresas_compras (
         codi_empresa INTEGER PRIMARY KEY,
@@ -25,7 +25,7 @@ def criar_banco():
     )
     ''')
 
-    # 3. Acompanhamento (COM NOVOS CAMPOS DO PDF: Categoria e Observação)
+    # 3. Acompanhamento (⚠️ Coluna arquivo_anexo REMOVIDA)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS acompanhamento_compras (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,14 +34,14 @@ def criar_banco():
         numero_orcamento TEXT,
         numero_pedido TEXT,
         item_comprado TEXT,
-        categoria TEXT,                    -- NOVO: Ex: Rolamento, Correia 
+        categoria TEXT,                    
         fornecedor TEXT,
         data_compra TEXT,
         
         nota_fiscal TEXT,
         serie_nota TEXT,
-        arquivo_anexo TEXT,
-        observacao TEXT,                   -- NOVO: Comentários/Updates 
+        -- REMOVIDA: arquivo_anexo TEXT, 
+        observacao TEXT,                   
         
         codi_empresa INTEGER NOT NULL,
         id_responsavel_chamado INTEGER,
@@ -56,15 +56,26 @@ def criar_banco():
     )
     ''')
     
-    # --- DADOS INICIAIS ---
+    # 4. NOVA TABELA: Múltiplos Anexos
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS pedidos_anexos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pedido_id INTEGER NOT NULL,
+        nome_arquivo TEXT NOT NULL,
+        nome_original TEXT,
+        data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (pedido_id) REFERENCES acompanhamento_compras (id) ON DELETE CASCADE
+    )
+    ''')
     
-    # Admin
+    # --- DADOS INICIAIS ---
     senha_admin = generate_password_hash('123456')
     try:
         cursor.execute("INSERT INTO usuarios (nome_completo, email, senha, nivel_acesso, aprovado) VALUES (?, ?, ?, ?, ?)",
                        ('Administrador', 'admin@nutrane.com.br', senha_admin, 'admin', 1))
     except sqlite3.IntegrityError: pass
 
+    # Empresas Reais (BASEADO NO CSV)
     empresas = [
         (2, 'Durancho Sertania'),
         (7, 'Nutrane Bahia'),
@@ -74,15 +85,13 @@ def criar_banco():
         (10, 'Nutrind')
     ]
     try:
-        # A instrução REPLACE INTO é mais segura para garantir que as empresas estejam corretas
-        # sem violar a chave primária se o script for rodado mais de uma vez.
         cursor.executemany("REPLACE INTO empresas_compras (codi_empresa, nome_empresa) VALUES (?, ?)", empresas)
         print("Unidades (Filiais) atualizadas conforme CSV!")
     except sqlite3.IntegrityError: pass
 
     connection.commit()
     connection.close()
-    print("Banco recriado com Categoria, Observação e Novas Unidades!")
+    print("Banco recriado com Múltiplos Anexos e Novas Unidades!")
 
 if __name__ == '__main__':
     criar_banco()

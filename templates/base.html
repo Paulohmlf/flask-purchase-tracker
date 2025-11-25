@@ -76,7 +76,7 @@
     </div>
 
     <script>
-        // Função chamada pelos links de exclusão em todas as páginas
+        // Função universal para mostrar o modal
         function mostrarModal(url, tipo = 'pedido') {
             document.getElementById('confirmLink').href = url;
             
@@ -87,7 +87,7 @@
             }
             
             document.getElementById('confirmModal').style.display = 'flex';
-            document.getElementById('cancelButton').focus(); // Foca no Cancelar
+            document.getElementById('cancelButton').focus(); // Foca no Cancelar para prevenir clique acidental
             return false;
         }
         

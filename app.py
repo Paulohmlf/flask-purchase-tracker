@@ -25,6 +25,22 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+# --- FUNÇÃO HELPER PARA SALVAR MULTIPLOS ARQUIVOS ---
+def salvar_anexos_multiplos(conn, pedido_id, files):
+    for arq in files:
+        if arq and allowed_file(arq.filename) and arq.filename != '':
+            nome_original = arq.filename
+            # Nome seguro evita caracteres especiais e usa timestamp
+            nome_seguro = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{nome_original}")
+            arq.save(os.path.join(app.config['UPLOAD_FOLDER'], nome_seguro))
+            
+            conn.execute('''
+                INSERT INTO pedidos_anexos (pedido_id, nome_arquivo, nome_original) 
+                VALUES (?, ?, ?)
+            ''', (pedido_id, nome_seguro, nome_original))
+    conn.commit()
+
+
 # --- LOGIN E REGISTRO ---
 @app.route('/', methods=['GET', 'POST'])
 def login():
@@ -67,7 +83,7 @@ def registro():
             flash('Email já existe.')
     return render_template('registro.html')
 
-# --- DASHBOARD TURBINADO (COM LINHA DO TEMPO) ---
+# --- DASHBOARD TURBINADO (COM LINHA DO TEMPO E FILTROS DE DATA) ---
 @app.route('/dashboard')
 def dashboard():
     if 'user_id' not in session:
@@ -80,6 +96,9 @@ def dashboard():
     f_empresa = request.args.get('f_empresa', '')
     f_comprador = request.args.get('f_comprador', '')
     f_status = request.args.get('f_status', '')
+    # NOVOS FILTROS DE DATA
+    f_data_inicio = request.args.get('f_data_inicio', '')
+    f_data_fim = request.args.get('f_data_fim', '')
     
     pagina = request.args.get('page', 1, type=int)
     itens_por_pagina = 10
@@ -105,6 +124,15 @@ def dashboard():
     if f_status:
         conditions.append("c.status_compra = ?")
         params.append(f_status)
+    
+    # NOVAS CONDIÇÕES DE FILTRO POR DATA (data_registro é um TIMESTAMP)
+    if f_data_inicio:
+        conditions.append("c.data_registro >= ?")
+        params.append(f_data_inicio + ' 00:00:00') # Garante que pega desde o início do dia
+    
+    if f_data_fim:
+        conditions.append("c.data_registro <= ?")
+        params.append(f_data_fim + ' 23:59:59') # Garante que pega até o final do dia
 
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
     
@@ -224,6 +252,8 @@ def dashboard():
     return render_template('dashboard.html', 
                            pedidos=pedidos, pagina=pagina, total_paginas=total_paginas,
                            busca=busca, f_empresa=f_empresa, f_comprador=f_comprador, f_status=f_status,
+                           # PASSANDO OS NOVOS FILTROS DE DATA DE VOLTA
+                           f_data_inicio=f_data_inicio, f_data_fim=f_data_fim,
                            lista_empresas=lista_empresas, lista_compradores=lista_compradores, lista_status=lista_status,
                            kpis=kpis,
                            # Gráficos Antigos
@@ -233,7 +263,6 @@ def dashboard():
                            # NOVO GRÁFICO DE LINHA DO TEMPO
                            graf_timeline={'labels': labels_timeline, 'values': values_timeline})
 
-# --- ROTAS DE CRIAÇÃO/EDIÇÃO ---
 @app.route('/nova_compra', methods=['GET', 'POST'])
 def nova_compra():
     if 'user_id' not in session:
@@ -304,27 +333,28 @@ def nova_compra():
         # --- SE NÃO HOUVER ERROS, PROSSEGUE COM UPLOAD E DB ---
         
         # Lógica de Upload de Arquivo
-        arq = request.files.get('arquivo')
-        nome_arq = None
-        if arq and allowed_file(arq.filename):
-            nome_arq = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{arq.filename}")
-            arq.save(os.path.join(app.config['UPLOAD_FOLDER'], nome_arq))
+        files = request.files.getlist('arquivo') # Múltiplos arquivos
             
-        # Inserção no Banco de Dados: Usando f.get() para todos os campos opcionais.
-        conn.execute('''
+        # 1. Insere o Pedido Principal (usa cursor.lastrowid para o multi-upload)
+        cursor = conn.execute('''
             INSERT INTO acompanhamento_compras (
                 numero_solicitacao, numero_orcamento, numero_pedido, item_comprado, categoria, 
-                fornecedor, data_compra, nota_fiscal, serie_nota, arquivo_anexo, 
+                fornecedor, data_compra, nota_fiscal, serie_nota, 
                 observacao, codi_empresa, id_responsavel_chamado, id_comprador_responsavel, 
                 prazo_entrega, status_compra
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ''', (
             f.get('solicitacao'), f.get('orcamento'), f.get('pedido'), f.get('item'), f.get('categoria'), 
-            f.get('fornecedor'), f.get('data_compra') or None, f.get('nota'), f.get('serie'), nome_arq, 
+            f.get('fornecedor'), f.get('data_compra') or None, f.get('nota'), f.get('serie'), 
             f.get('observacao'), f.get('empresa'), f.get('resp_chamado') or None, f.get('resp_comprador') or None, 
             f.get('prazo') or None, f.get('status')
         ))
-        conn.commit()
+
+        pedido_id = cursor.lastrowid # Captura o ID do pedido
+        
+        # 2. Salva Anexos Múltiplos
+        salvar_anexos_multiplos(conn, pedido_id, files)
+        
         conn.close()
         flash('✅ Pedido de Compra registrado com sucesso!')
         return redirect(url_for('dashboard'))
@@ -339,45 +369,79 @@ def editar_pedido(id):
     if 'user_id' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
     
+    # 1. BUSCA DE DADOS COMPARTILHADOS (GET/POST)
     pedido = conn.execute('SELECT * FROM acompanhamento_compras WHERE id = ?', (id,)).fetchone()
     usuarios = conn.execute('SELECT * FROM usuarios WHERE aprovado = 1 ORDER BY nome_completo').fetchall()
     
     if request.method == 'POST':
-        f = request.form; arq = request.files.get('arquivo'); nome_arq = pedido['arquivo_anexo']
-        if arq and allowed_file(arq.filename):
-            nome_arq = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{arq.filename}")
-            arq.save(os.path.join(app.config['UPLOAD_FOLDER'], nome_arq))
+        f = request.form
         
-        conn.execute('''UPDATE acompanhamento_compras SET numero_solicitacao=?, numero_orcamento=?, numero_pedido=?, item_comprado=?, categoria=?, fornecedor=?, data_compra=?, prazo_entrega=?, data_entrega_reprogramada=?, nota_fiscal=?, serie_nota=?, status_compra=?, arquivo_anexo=?, observacao=?, id_responsavel_chamado=?, id_comprador_responsavel=? WHERE id=?''', 
-                     (f['solicitacao'], f.get('orcamento'), f.get('pedido'), f['item'], f.get('categoria'), f['fornecedor'], f.get('data_compra') or None, f.get('prazo') or None, f.get('reprogramada') or None, f.get('nota'), f.get('serie'), f['status'], nome_arq, f.get('observacao'), 
+        # 1. Update do Pedido Principal
+        conn.execute('''UPDATE acompanhamento_compras SET numero_solicitacao=?, numero_orcamento=?, numero_pedido=?, item_comprado=?, categoria=?, fornecedor=?, data_compra=?, prazo_entrega=?, data_entrega_reprogramada=?, nota_fiscal=?, serie_nota=?, status_compra=?, observacao=?, id_responsavel_chamado=?, id_comprador_responsavel=? WHERE id=?''', 
+                     (f['solicitacao'], f.get('orcamento'), f.get('pedido'), f['item'], f.get('categoria'), f['fornecedor'], f.get('data_compra') or None, f.get('prazo') or None, f.get('reprogramada') or None, f.get('nota'), f.get('serie'), f['status'], f.get('observacao'), 
                       f.get('resp_chamado') or None, f.get('resp_comprador') or None, 
                       id))
         
-        conn.commit(); conn.close(); return redirect(url_for('dashboard'))
-    
-    conn.close()
-    return render_template('editar_pedido.html', pedido=pedido, usuarios=usuarios)
+        # 2. Salva novos Anexos Múltiplos
+        files = request.files.getlist('arquivo')
+        salvar_anexos_multiplos(conn, id, files)
+        
+        conn.close()
+        flash('✅ Pedido alterado com sucesso!')
+        # Retorna para o dashboard após salvar (Fluxo principal)
+        return redirect(url_for('dashboard'))
 
+    anexos = conn.execute('SELECT * FROM pedidos_anexos WHERE pedido_id = ?', (id,)).fetchall()
+    
+    conn.close() # Fecha a conexão SOMENTE AGORA, após todas as consultas.
+    
+    # Renderiza o template
+    return render_template('editar_pedido.html', pedido=pedido, usuarios=usuarios, anexos=anexos)
+
+# --- ROTAS DE EXCLUSÃO (MODIFICADAS) ---
 @app.route('/excluir_pedido/<int:id>')
 def excluir_pedido(id):
     if 'user_id' not in session: return redirect(url_for('login'))
-    conn = get_db_connection(); p = conn.execute('SELECT arquivo_anexo FROM acompanhamento_compras WHERE id=?',(id,)).fetchone()
-    if p and p['arquivo_anexo']: 
-        try: os.remove(os.path.join(app.config['UPLOAD_FOLDER'], p['arquivo_anexo']))
+    conn = get_db_connection()
+    
+    # 1. Busca todos os arquivos para exclusão física
+    anexos = conn.execute('SELECT nome_arquivo FROM pedidos_anexos WHERE pedido_id=?',(id,)).fetchall()
+    for anexo in anexos:
+        try: os.remove(os.path.join(app.config['UPLOAD_FOLDER'], anexo['nome_arquivo']))
         except: pass
-    conn.execute('DELETE FROM acompanhamento_compras WHERE id=?',(id,)); conn.commit(); conn.close()
+        
+    # 2. Exclui o registro principal (a tabela pedidos_anexos é excluída via ON DELETE CASCADE no DB)
+    conn.execute('DELETE FROM acompanhamento_compras WHERE id=?',(id,)); 
+    conn.commit()
+    conn.close()
     flash('Excluído!'); return redirect(url_for('dashboard'))
 
-@app.route('/excluir_anexo/<int:id>')
-def excluir_anexo(id):
+# NOVA ROTA: Exclui um anexo individual
+@app.route('/excluir_anexo/<int:anexo_id>')
+def excluir_anexo(anexo_id):
     if 'user_id' not in session: return redirect(url_for('login'))
-    conn = get_db_connection(); p = conn.execute('SELECT arquivo_anexo FROM acompanhamento_compras WHERE id=?',(id,)).fetchone()
-    if p and p['arquivo_anexo']:
-        try: os.remove(os.path.join(app.config['UPLOAD_FOLDER'], p['arquivo_anexo']))
+    conn = get_db_connection()
+    
+    anexo = conn.execute('SELECT pedido_id, nome_arquivo FROM pedidos_anexos WHERE id=?',(anexo_id,)).fetchone()
+    
+    if anexo:
+        pedido_id = anexo['pedido_id']
+        # 1. Exclui o arquivo físico
+        try: os.remove(os.path.join(app.config['UPLOAD_FOLDER'], anexo['nome_arquivo']))
         except: pass
-        conn.execute('UPDATE acompanhamento_compras SET arquivo_anexo=NULL WHERE id=?',(id,)); conn.commit()
-    conn.close(); return redirect(url_for('editar_pedido', id=id))
+        
+        # 2. Exclui o registro do banco
+        conn.execute('DELETE FROM pedidos_anexos WHERE id=?',(anexo_id,)); 
+        conn.commit()
+        conn.close()
+        flash('Anexo removido com sucesso!'); 
+        return redirect(url_for('editar_pedido', id=pedido_id))
+    
+    conn.close()
+    flash('Anexo não encontrado.');
+    return redirect(url_for('dashboard'))
 
+# --- ROTAS ADMIN E LOGOUT (INALTERADO) ---
 @app.route('/admin/usuarios', methods=['GET', 'POST'])
 def admin_usuarios():
     if session.get('user_nivel') != 'admin': return redirect(url_for('dashboard'))
@@ -389,6 +453,6 @@ def admin_usuarios():
 @app.route('/logout')
 def logout(): session.clear(); return redirect(url_for('login'))
 
-# Linha alterada no final do app.py
+# --- CONFIGURAÇÃO DE HOST E PORTA ---
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)
