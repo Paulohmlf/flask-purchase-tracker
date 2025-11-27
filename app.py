@@ -434,7 +434,7 @@ def ver_pedido(id):
 
     return render_template('ver_pedido.html', pedido=pedido, itens=itens, anexos=anexos)
 
-# --- IMPORTAÇÃO DE PDF (COM LÓGICA INTELIGENTE "SMART SWITCH") ---
+# --- IMPORTAÇÃO DE PDF (COM CORREÇÃO PARA REQUERENTE) ---
 @app.route('/importar_solicitacao', methods=['POST'])
 def importar_solicitacao():
     if 'arquivo_pdf' not in request.files:
@@ -450,15 +450,18 @@ def importar_solicitacao():
     itens_pdf = []
     lista_obs_global = []
     
-    # Lista de unidades conhecidas (para ativar o interruptor)
     unidades_conhecidas = ['UN', 'PC', 'CX', 'KG', 'M', 'L', 'LITRO', 'METRO', 'PAR', 'UN GERAL']
 
     try:
         with pdfplumber.open(file) as pdf:
             page = pdf.pages[0]
+            
+            # --- 1. CABEÇALHO COM LAYOUT PRESERVADO ---
+            # Usa layout=True para ver os espaços físicos
+            texto_layout = page.extract_text(layout=True) or ""
             texto_bruto = page.extract_text() or ""
             
-            # 1. Cabeçalho
+            # Cabeçalhos básicos (Solicitação, Data, Empresa)
             match_solic = re.search(r'Solicitação de Compra:\s*(\d+)', texto_bruto)
             if match_solic: dados_pdf['solicitacao'] = match_solic.group(1)
             
@@ -467,19 +470,28 @@ def importar_solicitacao():
                 try: dados_pdf['data_compra'] = datetime.strptime(match_data.group(1), '%d/%m/%Y').strftime('%Y-%m-%d')
                 except: pass
             
-            if "Requerente" in texto_bruto:
-                linhas = texto_bruto.split('\n')
-                for i, linha in enumerate(linhas):
-                    if "Requerente" in linha and i + 1 < len(linhas):
-                        dados_pdf['solicitante_real'] = linhas[i+1].strip()
-                        break
-            
             match_emp = re.search(r'Empresa:\s*(\d+)', texto_bruto)
             if match_emp: dados_pdf['empresa'] = match_emp.group(1)
 
-            # 2. Itens (Texto Puro - Mais robusto para este PDF)
-            linhas = texto_bruto.split('\n')
-            for i, linha in enumerate(linhas):
+            # CORREÇÃO PARA O REQUERENTE (BUSCA INTELIGENTE NAS PRÓXIMAS LINHAS)
+            if "Requerente" in texto_layout:
+                linhas = texto_layout.split('\n')
+                for i, linha in enumerate(linhas):
+                    if "Requerente" in linha:
+                        # Procura nas próximas 3 linhas por alguma que não seja vazia
+                        for offset in range(1, 4):
+                            if i + offset < len(linhas):
+                                linha_alvo = linhas[i+offset].strip()
+                                if linha_alvo: # Achou a linha com texto!
+                                    # Separa pelo espaço duplo
+                                    partes = re.split(r'\s{2,}', linha_alvo)
+                                    dados_pdf['solicitante_real'] = partes[0]
+                                    break
+                        break
+
+            # --- 2. ITENS (TEXTO PURO COM SMART SWITCH) ---
+            linhas_prod = texto_bruto.split('\n')
+            for i, linha in enumerate(linhas_prod):
                 match_prod = re.search(r'^(\d{2}\.\d{2}\.\d{4})\s+(.+)', linha)
                 if match_prod:
                     codigo = match_prod.group(1)
@@ -487,50 +499,41 @@ def importar_solicitacao():
                     
                     # Verifica observação na linha seguinte
                     obs_texto = ""
-                    if i + 1 < len(linhas) and "Observação:" in linhas[i+1]:
-                        obs_texto = linhas[i+1].replace("Observação:", "").strip()
+                    if i + 1 < len(linhas_prod) and "Observação:" in linhas_prod[i+1]:
+                        obs_texto = linhas_prod[i+1].replace("Observação:", "").strip()
 
                     tokens = resto_linha.split()
                     qtd = "1"
                     unid = "UN"
                     descricao_parts = []
                     
-                    # --- LÓGICA INTELIGENTE (SMART SWITCH) ---
-                    # Assim que encontrar a Unidade, ignora TUDO o que vier depois até achar o Número
                     encontrou_unidade = False
                     
                     for token in tokens:
                         token_upper = token.upper()
                         
-                        # 1. Se achou número, é quantidade -> FIM DA LINHA
                         if re.match(r'^\d+,\d+$', token):
                             qtd = token.split(',')[0]
                             break 
                         
-                        # 2. Se achou Unidade -> Marca e guarda a unidade correta
                         elif token_upper in unidades_conhecidas or (token_upper == 'UN' and 'UN' in token_upper):
                             encontrou_unidade = True
                             unid = "UN" if "UN" in token_upper else token_upper
                             continue 
                         
-                        # 3. Se o interruptor está ligado (já achou unidade) e não é número... É LIXO!
                         if encontrou_unidade:
                             continue
                             
-                        # 4. Se não é nada disso, é parte do nome do produto
                         if not re.match(r'\d+,\d+', token): 
                             descricao_parts.append(token)
                     
                     desc_produto = " ".join(descricao_parts).strip()
                     
-                    # Formata o item limpo (apenas Código - Nome)
                     nome_item_formatado = f"{codigo} - {desc_produto}"
                     
-                    # Adiciona a observação (se houver) apenas ao campo global
                     if obs_texto:
                         lista_obs_global.append(f"{codigo} {desc_produto} - {obs_texto}")
                     else:
-                        # Se não tiver obs específica, adiciona só o nome para constar
                         lista_obs_global.append(f"{codigo} {desc_produto}")
 
                     itens_pdf.append({'nome_item': nome_item_formatado, 'quantidade': qtd, 'unidade_medida': unid})
@@ -539,7 +542,6 @@ def importar_solicitacao():
         print(f"Erro: {e}")
         flash('Erro ao processar PDF.')
 
-    # Preenche o campo de observações global com a lista formatada
     if lista_obs_global:
         dados_pdf['observacao'] = "\n".join(lista_obs_global)
 
