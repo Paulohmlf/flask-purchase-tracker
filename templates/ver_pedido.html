@@ -158,8 +158,21 @@
 
         <div style="flex: 1;">
             <h4 style="margin-top: 0; color: #555; border-bottom: 1px solid #ccc;">Responsáveis</h4>
-            <p style="margin: 5px 0; font-size: 0.9rem;">Solicitante:<br><strong>{{ pedido.nome_solicitante or 'Não informado' }}</strong></p>
-            <p style="margin: 5px 0; font-size: 0.9rem;">Comprador:<br><strong>{{ pedido.nome_comprador or 'Não informado' }}</strong></p>
+            
+            <p style="margin: 5px 0; font-size: 0.9rem;">
+                Solicitante (Origem):<br>
+                <strong style="font-size: 1.1rem; color: #000;">{{ pedido.solicitante_real or 'Não informado' }}</strong>
+            </p>
+
+            <p style="margin: 15px 0 5px 0; font-size: 0.9rem;">
+                Responsável Chamado (Sistema):<br>
+                <strong>{{ pedido.nome_solicitante or '-' }}</strong>
+            </p>
+            
+            <p style="margin: 5px 0; font-size: 0.9rem;">
+                Comprador:<br>
+                <strong>{{ pedido.nome_comprador or '-' }}</strong>
+            </p>
         </div>
     </div>
 
@@ -172,8 +185,8 @@
 
     <div class="area-assinatura">
         <div class="linha-assinatura">
-            {{ pedido.nome_solicitante or 'Solicitante' }}<br>
-            <strong>Solicitante</strong>
+            {{ pedido.solicitante_real or pedido.nome_solicitante or 'Solicitante' }}<br>
+            <strong>Assinatura do Solicitante</strong>
         </div>
         <div class="linha-assinatura">
             {{ pedido.nome_comprador or 'Comprador' }}<br>

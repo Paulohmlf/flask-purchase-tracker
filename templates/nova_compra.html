@@ -114,9 +114,17 @@
             </label>
             <input type="file" id="arquivo" name="arquivo" accept=".pdf,.jpg,.jpeg,.png" multiple style="display: none;" onchange="mostrarNomeArquivo()">
             
+            <div style="margin-top: 20px;">
+                <label>Solicitante Real (Quem pediu lá na ponta?):</label>
+                <input type="text" name="solicitante_real" placeholder="Ex: Zezinho" 
+                       value="{{ dados_form.get('solicitante_real', '') }}" 
+                       style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px;">
+                <p style="margin: 5px 0 0 0; font-size: 0.85rem; color: #666;">Nome da pessoa na unidade que solicitou o material.</p>
+            </div>
+
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
                 <div>
-                    <label>Responsavel pela Compra:</label>
+                    <label>Responsável pela Compra (Sistema):</label>
                     <select name="resp_comprador">
                         <option value="">-- Selecione --</option>
                         {% for u in usuarios %}
@@ -126,7 +134,7 @@
                 </div>
                 
                 <div>
-                    <label>Responsavel pela Solicitação:</label>
+                    <label>Responsável pela Solicitação (Sistema):</label>
                     <select name="resp_chamado">
                         <option value="">-- Selecione --</option>
                         {% for u in usuarios %}
@@ -140,7 +148,7 @@
                 <label>Situação Inicial:</label>
                 <select name="status" style="font-weight: bold; color: #333;">
                     <option value="Aguardando Aprovação">🟡 Aguardando Aprovação</option>
-                    <option value="Orçamento">🔵 Orçamento</option>
+                    <option value="Orçamento">🟣 Orçamento</option>
                     <option value="Confirmado">🟢 Confirmado</option>
                 </select>
             </div>
@@ -163,7 +171,7 @@
         // Limpa os valores dos inputs clonados
         const inputs = novaLinha.querySelectorAll('input');
         inputs.forEach(input => input.value = '');
-        inputs[1].value = 1; // Reseta quantidade para 1 (O índice 1 é a quantidade, pois índice 0 é o nome)
+        inputs[1].value = 1; // Reseta quantidade para 1
         
         // Mostra o botão de excluir na nova linha
         const btnRemover = novaLinha.querySelector('button');

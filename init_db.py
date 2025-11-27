@@ -27,7 +27,7 @@ def criar_banco():
     ''')
 
     # 3. Tabela Principal do Pedido (Cabeçalho)
-    # Mantivemos 'item_comprado' para servir como Título/Resumo do pedido no Dashboard
+    # Inclui a nova coluna 'solicitante_real'
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS acompanhamento_compras (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,8 +35,8 @@ def criar_banco():
         numero_solicitacao TEXT NOT NULL,
         numero_orcamento TEXT,
         numero_pedido TEXT,
-        item_comprado TEXT,  -- Agora serve como "Título do Pedido" ou "Assunto"
-        categoria TEXT,      -- Categoria principal do pedido
+        item_comprado TEXT,  -- Título/Resumo do pedido
+        categoria TEXT,
         fornecedor TEXT,
         data_compra TEXT,
         
@@ -45,20 +45,22 @@ def criar_banco():
         observacao TEXT,                   
         
         codi_empresa INTEGER NOT NULL,
-        id_responsavel_chamado INTEGER,
-        id_comprador_responsavel INTEGER,
+        id_responsavel_chamado INTEGER,   -- Usuário do Sistema
+        id_comprador_responsavel INTEGER, -- Usuário do Sistema
+        solicitante_real TEXT,            -- Nome de quem pediu na ponta (Texto livre)
+        
         prazo_entrega TEXT,
         data_entrega_reprogramada TEXT,
         status_compra TEXT DEFAULT 'Aguardando Aprovação',
         data_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        
         FOREIGN KEY (codi_empresa) REFERENCES empresas_compras (codi_empresa),
         FOREIGN KEY (id_responsavel_chamado) REFERENCES usuarios (id),
         FOREIGN KEY (id_comprador_responsavel) REFERENCES usuarios (id)
     )
     ''')
     
-    # 4. NOVA TABELA: Itens do Pedido (Produtos) 
-    # Aqui ficam os detalhes de cada produto (1 Pedido -> Vários Itens)
+    # 4. Tabela de Itens do Pedido (1 Pedido -> Vários Itens)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS pedidos_itens (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
