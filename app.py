@@ -7,6 +7,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime, date, timedelta
 from collections import defaultdict
+import pdfplumber
+import re
 
 app = Flask(__name__)
 app.secret_key = 'chave_super_secreta_nutrane'
@@ -230,8 +232,7 @@ def dashboard():
                            graf_comp={'labels': labels_comp, 'values': values_comp},
                            graf_timeline={'labels': labels_timeline, 'values': values_timeline})
 
-# --- EM APP.PY ---
-
+# --- NOVA COMPRA ---
 @app.route('/nova_compra', methods=['GET', 'POST'])
 def nova_compra():
     if 'user_id' not in session: return redirect(url_for('login'))
@@ -256,7 +257,15 @@ def nova_compra():
         if not f.get('solicitacao'): erros.append("O Número da Solicitação é obrigatório.")
         if not f.get('empresa'): erros.append("A Unidade solicitante é obrigatória.")
         
-        # Validação de data... (código igual ao anterior)
+        data_compra_str = f.get('data_compra')
+        prazo_str = f.get('prazo')
+        hoje = date.today()
+        
+        if data_compra_str:
+            try:
+                dt_obj = datetime.strptime(data_compra_str, '%Y-%m-%d').date()
+                if dt_obj > hoje: erros.append("Data da Compra não pode ser futura.")
+            except: erros.append("Data da Compra inválida.")
             
         if erros:
             for erro in erros: flash(f'🚨 {erro}')
@@ -267,7 +276,6 @@ def nova_compra():
         if len(nomes_itens) > 1:
             item_titulo += f" (+ {len(nomes_itens)-1} itens)"
 
-        # ADICIONADO: solicitante_real no INSERT
         cursor = conn.execute('''
             INSERT INTO acompanhamento_compras (
                 numero_solicitacao, numero_orcamento, numero_pedido, item_comprado, categoria, 
@@ -279,12 +287,11 @@ def nova_compra():
             f.get('solicitacao'), f.get('orcamento'), f.get('pedido'), item_titulo, f.get('categoria'), 
             f.get('fornecedor'), f.get('data_compra') or None, f.get('nota'), f.get('serie'), 
             f.get('observacao'), f.get('empresa'), f.get('resp_chamado') or None, f.get('resp_comprador') or None, 
-            f.get('prazo') or None, f.get('status'), f.get('solicitante_real') # <--- NOVO CAMPO
+            f.get('prazo') or None, f.get('status'), f.get('solicitante_real')
         ))
 
         pedido_id = cursor.lastrowid
         
-        # ... (código de inserção de itens e anexos igual ao anterior) ...
         unidades = f.getlist('unidade[]')
         for i in range(len(nomes_itens)):
             nome = nomes_itens[i]
@@ -322,7 +329,6 @@ def editar_pedido(id):
             if len(nomes_itens) > 1:
                 novo_titulo += f" (+ {len(nomes_itens)-1} itens)"
         
-        # ADICIONADO: solicitante_real no UPDATE
         conn.execute('''UPDATE acompanhamento_compras SET 
             numero_solicitacao=?, numero_orcamento=?, numero_pedido=?, item_comprado=?, categoria=?, 
             fornecedor=?, data_compra=?, prazo_entrega=?, data_entrega_reprogramada=?, 
@@ -333,10 +339,9 @@ def editar_pedido(id):
              f['fornecedor'], f.get('data_compra') or None, f.get('prazo') or None, f.get('reprogramada') or None, 
              f.get('nota'), f.get('serie'), f['status'], f.get('observacao'), 
              f.get('resp_chamado') or None, f.get('resp_comprador') or None, 
-             f.get('solicitante_real'), # <--- NOVO CAMPO
+             f.get('solicitante_real'),
              id))
         
-        # ... (resto do código de itens e anexos igual) ...
         ids_itens = f.getlist('item_id[]')
         qtds_itens = f.getlist('qtd[]')
         unidades = f.getlist('unidade[]')
@@ -347,7 +352,6 @@ def editar_pedido(id):
                 if id_rem: conn.execute('DELETE FROM pedidos_itens WHERE id = ?', (id_rem,))
         
         for i in range(len(nomes_itens)):
-            # ... (Lógica de loop igual à anterior) ...
             item_id = ids_itens[i]
             nome = nomes_itens[i]
             qtd = qtds_itens[i]
@@ -374,7 +378,6 @@ def excluir_pedido(id):
     if 'user_id' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
     
-    # Apagar arquivos físicos
     anexos = conn.execute('SELECT nome_arquivo FROM pedidos_anexos WHERE pedido_id=?',(id,)).fetchall()
     for anexo in anexos:
         try: os.remove(os.path.join(app.config['UPLOAD_FOLDER'], anexo['nome_arquivo']))
@@ -404,13 +407,11 @@ def excluir_anexo(anexo_id):
     conn.close()
     return redirect(url_for('dashboard'))
 
-# --- ROTA DE VISUALIZAÇÃO (SOMENTE LEITURA) ---
 @app.route('/ver_pedido/<int:id>')
 def ver_pedido(id):
     if 'user_id' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
     
-    # Fazemos JOIN para já pegar os nomes das pessoas e da empresa
     sql = '''
         SELECT c.*, 
                e.nome_empresa, 
@@ -423,18 +424,140 @@ def ver_pedido(id):
         WHERE c.id = ?
     '''
     pedido = conn.execute(sql, (id,)).fetchone()
-    
-    # Buscar os itens e anexos
     itens = conn.execute('SELECT * FROM pedidos_itens WHERE pedido_id = ?', (id,)).fetchall()
     anexos = conn.execute('SELECT * FROM pedidos_anexos WHERE pedido_id = ?', (id,)).fetchall()
     
     conn.close()
-    
     if not pedido:
         flash('Pedido não encontrado.')
         return redirect(url_for('dashboard'))
 
     return render_template('ver_pedido.html', pedido=pedido, itens=itens, anexos=anexos)
+
+# --- IMPORTAÇÃO DE PDF (COM LÓGICA INTELIGENTE "SMART SWITCH") ---
+@app.route('/importar_solicitacao', methods=['POST'])
+def importar_solicitacao():
+    if 'arquivo_pdf' not in request.files:
+        flash('Nenhum arquivo enviado.')
+        return redirect(url_for('nova_compra'))
+    
+    file = request.files['arquivo_pdf']
+    if file.filename == '':
+        flash('Nenhum arquivo selecionado.')
+        return redirect(url_for('nova_compra'))
+
+    dados_pdf = {}
+    itens_pdf = []
+    lista_obs_global = []
+    
+    # Lista de unidades conhecidas (para ativar o interruptor)
+    unidades_conhecidas = ['UN', 'PC', 'CX', 'KG', 'M', 'L', 'LITRO', 'METRO', 'PAR', 'UN GERAL']
+
+    try:
+        with pdfplumber.open(file) as pdf:
+            page = pdf.pages[0]
+            texto_bruto = page.extract_text() or ""
+            
+            # 1. Cabeçalho
+            match_solic = re.search(r'Solicitação de Compra:\s*(\d+)', texto_bruto)
+            if match_solic: dados_pdf['solicitacao'] = match_solic.group(1)
+            
+            match_data = re.search(r'Data:\s*(\d{2}/\d{2}/\d{4})', texto_bruto)
+            if match_data:
+                try: dados_pdf['data_compra'] = datetime.strptime(match_data.group(1), '%d/%m/%Y').strftime('%Y-%m-%d')
+                except: pass
+            
+            if "Requerente" in texto_bruto:
+                linhas = texto_bruto.split('\n')
+                for i, linha in enumerate(linhas):
+                    if "Requerente" in linha and i + 1 < len(linhas):
+                        dados_pdf['solicitante_real'] = linhas[i+1].strip()
+                        break
+            
+            match_emp = re.search(r'Empresa:\s*(\d+)', texto_bruto)
+            if match_emp: dados_pdf['empresa'] = match_emp.group(1)
+
+            # 2. Itens (Texto Puro - Mais robusto para este PDF)
+            linhas = texto_bruto.split('\n')
+            for i, linha in enumerate(linhas):
+                match_prod = re.search(r'^(\d{2}\.\d{2}\.\d{4})\s+(.+)', linha)
+                if match_prod:
+                    codigo = match_prod.group(1)
+                    resto_linha = match_prod.group(2)
+                    
+                    # Verifica observação na linha seguinte
+                    obs_texto = ""
+                    if i + 1 < len(linhas) and "Observação:" in linhas[i+1]:
+                        obs_texto = linhas[i+1].replace("Observação:", "").strip()
+
+                    tokens = resto_linha.split()
+                    qtd = "1"
+                    unid = "UN"
+                    descricao_parts = []
+                    
+                    # --- LÓGICA INTELIGENTE (SMART SWITCH) ---
+                    # Assim que encontrar a Unidade, ignora TUDO o que vier depois até achar o Número
+                    encontrou_unidade = False
+                    
+                    for token in tokens:
+                        token_upper = token.upper()
+                        
+                        # 1. Se achou número, é quantidade -> FIM DA LINHA
+                        if re.match(r'^\d+,\d+$', token):
+                            qtd = token.split(',')[0]
+                            break 
+                        
+                        # 2. Se achou Unidade -> Marca e guarda a unidade correta
+                        elif token_upper in unidades_conhecidas or (token_upper == 'UN' and 'UN' in token_upper):
+                            encontrou_unidade = True
+                            unid = "UN" if "UN" in token_upper else token_upper
+                            continue 
+                        
+                        # 3. Se o interruptor está ligado (já achou unidade) e não é número... É LIXO!
+                        if encontrou_unidade:
+                            continue
+                            
+                        # 4. Se não é nada disso, é parte do nome do produto
+                        if not re.match(r'\d+,\d+', token): 
+                            descricao_parts.append(token)
+                    
+                    desc_produto = " ".join(descricao_parts).strip()
+                    
+                    # Formata o item limpo (apenas Código - Nome)
+                    nome_item_formatado = f"{codigo} - {desc_produto}"
+                    
+                    # Adiciona a observação (se houver) apenas ao campo global
+                    if obs_texto:
+                        lista_obs_global.append(f"{codigo} {desc_produto} - {obs_texto}")
+                    else:
+                        # Se não tiver obs específica, adiciona só o nome para constar
+                        lista_obs_global.append(f"{codigo} {desc_produto}")
+
+                    itens_pdf.append({'nome_item': nome_item_formatado, 'quantidade': qtd, 'unidade_medida': unid})
+
+    except Exception as e:
+        print(f"Erro: {e}")
+        flash('Erro ao processar PDF.')
+
+    # Preenche o campo de observações global com a lista formatada
+    if lista_obs_global:
+        dados_pdf['observacao'] = "\n".join(lista_obs_global)
+
+    conn = get_db_connection()
+    empresas = conn.execute('SELECT * FROM empresas_compras').fetchall()
+    usuarios = conn.execute('SELECT * FROM usuarios WHERE aprovado = 1').fetchall()
+    conn.close()
+
+    if itens_pdf:
+        flash(f'✅ Sucesso! {len(itens_pdf)} itens carregados.')
+    else:
+        flash('⚠️ Nenhum item encontrado no PDF.')
+    
+    return render_template('nova_compra.html', 
+                           empresas=empresas, 
+                           usuarios=usuarios, 
+                           dados_form=dados_pdf, 
+                           itens_preenchidos=itens_pdf)
 
 @app.route('/admin/usuarios', methods=['GET', 'POST'])
 def admin_usuarios():
