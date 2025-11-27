@@ -434,7 +434,7 @@ def ver_pedido(id):
 
     return render_template('ver_pedido.html', pedido=pedido, itens=itens, anexos=anexos)
 
-# --- IMPORTAÇÃO DE PDF (COM CORREÇÃO PARA REQUERENTE) ---
+# --- IMPORTAÇÃO DE PDF (COM CORREÇÃO DE PC -> PCT) ---
 @app.route('/importar_solicitacao', methods=['POST'])
 def importar_solicitacao():
     if 'arquivo_pdf' not in request.files:
@@ -455,13 +455,9 @@ def importar_solicitacao():
     try:
         with pdfplumber.open(file) as pdf:
             page = pdf.pages[0]
-            
-            # --- 1. CABEÇALHO COM LAYOUT PRESERVADO ---
-            # Usa layout=True para ver os espaços físicos
-            texto_layout = page.extract_text(layout=True) or ""
             texto_bruto = page.extract_text() or ""
             
-            # Cabeçalhos básicos (Solicitação, Data, Empresa)
+            # --- 1. CABEÇALHO ---
             match_solic = re.search(r'Solicitação de Compra:\s*(\d+)', texto_bruto)
             if match_solic: dados_pdf['solicitacao'] = match_solic.group(1)
             
@@ -473,34 +469,36 @@ def importar_solicitacao():
             match_emp = re.search(r'Empresa:\s*(\d+)', texto_bruto)
             if match_emp: dados_pdf['empresa'] = match_emp.group(1)
 
-            # CORREÇÃO PARA O REQUERENTE (BUSCA INTELIGENTE NAS PRÓXIMAS LINHAS)
+            # --- CORREÇÃO: REQUERENTE ---
+            # Procura a linha com "Requerente" e depois busca nas próximas 3 linhas
+            # Usa layout=True para ver os espaços físicos e separar o nome da Obs
+            texto_layout = page.extract_text(layout=True) or ""
             if "Requerente" in texto_layout:
-                linhas = texto_layout.split('\n')
-                for i, linha in enumerate(linhas):
+                linhas_layout = texto_layout.split('\n')
+                for i, linha in enumerate(linhas_layout):
                     if "Requerente" in linha:
-                        # Procura nas próximas 3 linhas por alguma que não seja vazia
+                        # Procura nas próximas linhas por texto
                         for offset in range(1, 4):
-                            if i + offset < len(linhas):
-                                linha_alvo = linhas[i+offset].strip()
-                                if linha_alvo: # Achou a linha com texto!
-                                    # Separa pelo espaço duplo
+                            if i + offset < len(linhas_layout):
+                                linha_alvo = linhas_layout[i+offset].strip()
+                                if linha_alvo: 
+                                    # Corta onde tiver 2+ espaços
                                     partes = re.split(r'\s{2,}', linha_alvo)
                                     dados_pdf['solicitante_real'] = partes[0]
                                     break
                         break
 
             # --- 2. ITENS (TEXTO PURO COM SMART SWITCH) ---
-            linhas_prod = texto_bruto.split('\n')
-            for i, linha in enumerate(linhas_prod):
+            linhas = texto_bruto.split('\n')
+            for i, linha in enumerate(linhas):
                 match_prod = re.search(r'^(\d{2}\.\d{2}\.\d{4})\s+(.+)', linha)
                 if match_prod:
                     codigo = match_prod.group(1)
                     resto_linha = match_prod.group(2)
                     
-                    # Verifica observação na linha seguinte
                     obs_texto = ""
-                    if i + 1 < len(linhas_prod) and "Observação:" in linhas_prod[i+1]:
-                        obs_texto = linhas_prod[i+1].replace("Observação:", "").strip()
+                    if i + 1 < len(linhas) and "Observação:" in linhas[i+1]:
+                        obs_texto = linhas[i+1].replace("Observação:", "").strip()
 
                     tokens = resto_linha.split()
                     qtd = "1"
@@ -518,11 +516,16 @@ def importar_solicitacao():
                         
                         elif token_upper in unidades_conhecidas or (token_upper == 'UN' and 'UN' in token_upper):
                             encontrou_unidade = True
-                            unid = "UN" if "UN" in token_upper else token_upper
+                            
+                            # --- CORREÇÃO DE UNIDADE (PC -> PCT) ---
+                            if "UN" in token_upper: unid = "UN"
+                            elif token_upper == "PC": unid = "PCT"
+                            else: unid = token_upper
+                            
                             continue 
                         
                         if encontrou_unidade:
-                            continue
+                            continue 
                             
                         if not re.match(r'\d+,\d+', token): 
                             descricao_parts.append(token)
