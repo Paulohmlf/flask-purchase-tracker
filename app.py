@@ -30,7 +30,7 @@ def salvar_anexos_multiplos(conn, pedido_id, files):
     for arq in files:
         if arq and allowed_file(arq.filename) and arq.filename != '':
             nome_original = arq.filename
-            # Nome seguro evita caracteres especiais e usa timestamp
+            # Nome seguro evita caracteres especiais e usa timestamp para evitar duplicidade
             nome_seguro = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{nome_original}")
             arq.save(os.path.join(app.config['UPLOAD_FOLDER'], nome_seguro))
             
@@ -83,7 +83,7 @@ def registro():
             flash('Email já existe.')
     return render_template('registro.html')
 
-# --- DASHBOARD TURBINADO (COM LINHA DO TEMPO E FILTROS DE DATA) ---
+# --- DASHBOARD TURBINADO ---
 @app.route('/dashboard')
 def dashboard():
     if 'user_id' not in session:
@@ -93,10 +93,10 @@ def dashboard():
     
     # 1. Captura dos Filtros da URL
     busca = request.args.get('busca', '')
+    f_solicitacao = request.args.get('f_solicitacao', '') # <--- NOVO FILTRO
     f_empresa = request.args.get('f_empresa', '')
     f_comprador = request.args.get('f_comprador', '')
     f_status = request.args.get('f_status', '')
-    # NOVOS FILTROS DE DATA
     f_data_inicio = request.args.get('f_data_inicio', '')
     f_data_fim = request.args.get('f_data_fim', '')
     
@@ -113,6 +113,12 @@ def dashboard():
         t = f'%{busca}%'
         params.extend([t, t, t, t])
     
+    # --- LÓGICA DO NOVO FILTRO ---
+    if f_solicitacao:
+        conditions.append("c.numero_solicitacao LIKE ?")
+        params.append(f'%{f_solicitacao}%')
+    # -----------------------------
+    
     if f_empresa:
         conditions.append("c.codi_empresa = ?")
         params.append(f_empresa)
@@ -125,14 +131,13 @@ def dashboard():
         conditions.append("c.status_compra = ?")
         params.append(f_status)
     
-    # NOVAS CONDIÇÕES DE FILTRO POR DATA (data_registro é um TIMESTAMP)
     if f_data_inicio:
         conditions.append("c.data_registro >= ?")
-        params.append(f_data_inicio + ' 00:00:00') # Garante que pega desde o início do dia
+        params.append(f_data_inicio + ' 00:00:00')
     
     if f_data_fim:
         conditions.append("c.data_registro <= ?")
-        params.append(f_data_fim + ' 23:59:59') # Garante que pega até o final do dia
+        params.append(f_data_fim + ' 23:59:59')
 
     where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
     
@@ -186,29 +191,24 @@ def dashboard():
     all_orders = conn.execute(sql_kpis, params).fetchall()
     
     kpis = {'total': len(all_orders), 'abertos': 0, 'atrasados': 0}
-    timeline_data = defaultdict(int) # Dicionário para agrupar datas
+    timeline_data = defaultdict(int)
     hoje = date.today()
     
     for r in all_orders:
-        # KPI Básico
         if 'Entregue' not in r['status_compra']:
             kpis['abertos'] += 1
             dt_str = r['data_entrega_reprogramada'] or r['prazo_entrega']
             if dt_str:
                 try:
                     dt_obj = datetime.strptime(dt_str, '%Y-%m-%d').date()
-                    if (dt_obj - hoje).days < 0:
+                    if (dt_obj - hoje).days <= 0: # Corrigido: 0 ou menos conta como atraso no KPI
                         kpis['atrasados'] += 1
                     
-                    # Lógica da Linha do Tempo (Agrupar por Semana)
-                    # Pega a data da Segunda-Feira daquela semana
                     start_week = dt_obj - timedelta(days=dt_obj.weekday())
                     timeline_data[start_week] += 1
                 except:
                     pass
 
-    # Preparar dados da Linha do Tempo para o Gráfico
-    # Ordena as datas cronologicamente
     sorted_dates = sorted(timeline_data.keys())
     labels_timeline = [d.strftime('%d/%m') for d in sorted_dates]
     values_timeline = [timeline_data[d] for d in sorted_dates]
@@ -223,27 +223,51 @@ def dashboard():
 
     conn.close()
 
-    # Processamento Visual
+    # Processamento Visual e Lógica de Cores da Imagem
     pedidos = [dict(row) for row in rows]
     
     for p in pedidos:
         s = p['status_compra']
+        
+        # Definição de cores do Status do Pedido
         if s == 'Aguardando Aprovação': p.update({'cor_s': '#9b59b6', 'txt_s': 'ORÇAMENTO'})
         elif s in ['Confirmado', 'Enviado ao Fornecedor', 'Em Trânsito']: p.update({'cor_s': '#3498db', 'txt_s': 'COMPRADO'})
         elif 'Entregue' in s: p.update({'cor_s': '#2ecc71', 'txt_s': 'ENTREGUE'})
         else: p.update({'cor_s': '#95a5a6', 'txt_s': s})
 
+        # Lógica de Prazos (Baseada na Imagem Enviada)
         dt_str = p['data_entrega_reprogramada'] or p['prazo_entrega']
         
         if dt_str and 'Entregue' not in s:
             try:
                 dias = (datetime.strptime(dt_str, '%Y-%m-%d').date() - hoje).days
-                if dias < 0: p.update({'cor_p': '#e74c3c', 'txt_p': 'ATRASADO', 'cor_s': '#e74c3c', 'txt_s': 'ATRASADO'})
-                elif dias <= 2: p.update({'cor_p': '#f1c40f', 'txt_p': 'ATENÇÃO'})
-                else: p.update({'cor_p': '#2ecc71', 'txt_p': 'NO PRAZO'})
-            except: p.update({'cor_p': 'transparent', 'txt_p': '-'})
-        else: p.update({'cor_p': 'transparent', 'txt_p': '-'})
+                
+                if dias <= 0: 
+                    # 🔴 0 DIAS (ou menos) -> ATRASADO
+                    p.update({
+                        'cor_p': '#e74c3c', 
+                        'txt_p': 'ATRASADO', 
+                        'cor_s': '#e74c3c', 
+                        'txt_s': 'ATRASADO'
+                    })
+                elif dias <= 2: 
+                    # 🟡 2 A 1 DIAS -> ATENÇÃO
+                    p.update({
+                        'cor_p': '#f1c40f', 
+                        'txt_p': 'ATENÇÃO'
+                    })
+                else: 
+                    # 🟢 5 A 3 DIAS (ou mais) -> NO PRAZO
+                    p.update({
+                        'cor_p': '#2ecc71', 
+                        'txt_p': 'NO PRAZO'
+                    })
+            except: 
+                p.update({'cor_p': 'transparent', 'txt_p': '-'})
+        else: 
+            p.update({'cor_p': 'transparent', 'txt_p': '-'})
 
+        # Formatação de Datas para Exibição
         if p['prazo_entrega']:
             p['prazo_entrega'] = datetime.strptime(p['prazo_entrega'], '%Y-%m-%d').strftime('%d/%m/%Y')
         if p['data_entrega_reprogramada']:
@@ -251,16 +275,15 @@ def dashboard():
 
     return render_template('dashboard.html', 
                            pedidos=pedidos, pagina=pagina, total_paginas=total_paginas,
-                           busca=busca, f_empresa=f_empresa, f_comprador=f_comprador, f_status=f_status,
-                           # PASSANDO OS NOVOS FILTROS DE DATA DE VOLTA
+                           busca=busca, 
+                           f_solicitacao=f_solicitacao, # <--- ENVIAR PARA O TEMPLATE
+                           f_empresa=f_empresa, f_comprador=f_comprador, f_status=f_status,
                            f_data_inicio=f_data_inicio, f_data_fim=f_data_fim,
                            lista_empresas=lista_empresas, lista_compradores=lista_compradores, lista_status=lista_status,
                            kpis=kpis,
-                           # Gráficos Antigos
                            graf_status={'labels': labels_status, 'values': values_status},
                            graf_forn={'labels': labels_forn, 'values': values_forn},
                            graf_comp={'labels': labels_comp, 'values': values_comp},
-                           # NOVO GRÁFICO DE LINHA DO TEMPO
                            graf_timeline={'labels': labels_timeline, 'values': values_timeline})
 
 @app.route('/nova_compra', methods=['GET', 'POST'])
@@ -272,70 +295,44 @@ def nova_compra():
     empresas = conn.execute('SELECT * FROM empresas_compras').fetchall()
     usuarios = conn.execute('SELECT * FROM usuarios WHERE aprovado = 1').fetchall()
     
-    # Dicionário para manter os dados no formulário em caso de erro
     dados_form = {}
     
     if request.method == 'POST':
         f = request.form
-        dados_form = f # Salva o formulário para passar de volta
-        
-        # --- VALIDAÇÃO DE ACESSIBILIDADE E PREVENÇÃO DE ERROS ---
+        dados_form = f
         erros = []
         
-        # 1. Campos obrigatórios (item, fornecedor, solicitacao, empresa)
-        # Note: Estamos usando f.get() aqui, mas validando que o valor não seja None/Vazio.
-        if not f.get('item'): erros.append("O item a ser comprado (O que é?) é obrigatório.")
-        if not f.get('fornecedor'): erros.append("O Fornecedor (Quem vende?) é obrigatório.")
+        if not f.get('item'): erros.append("O item a ser comprado é obrigatório.")
+        if not f.get('fornecedor'): erros.append("O Fornecedor é obrigatório.")
         if not f.get('solicitacao'): erros.append("O Número da Solicitação é obrigatório.")
-        if not f.get('empresa'): erros.append("A Unidade (Loja) solicitante é obrigatória. Por favor, selecione uma.")
+        if not f.get('empresa'): erros.append("A Unidade solicitante é obrigatória.")
         
-        # 2. Validação de Datas
         data_compra_str = f.get('data_compra')
         prazo_str = f.get('prazo')
-        
         data_compra_obj = None
         prazo_obj = None
         hoje = date.today()
         
-        # Tenta converter e validar a Data da Compra
         if data_compra_str:
             try:
                 data_compra_obj = datetime.strptime(data_compra_str, '%Y-%m-%d').date()
-                if data_compra_obj > hoje:
-                    erros.append("A Data da Compra não pode ser uma data futura. Corrija este campo.")
-            except ValueError:
-                erros.append("Formato da Data da Compra é inválido. Tente novamente.")
+                if data_compra_obj > hoje: erros.append("Data da Compra não pode ser futura.")
+            except ValueError: erros.append("Data da Compra inválida.")
 
-        # Tenta converter o Prazo de Entrega
         if prazo_str:
-            try:
-                prazo_obj = datetime.strptime(prazo_str, '%Y-%m-%d').date()
-            except ValueError:
-                erros.append("Formato do Prazo de Entrega é inválido. Tente novamente.")
+            try: prazo_obj = datetime.strptime(prazo_str, '%Y-%m-%d').date()
+            except ValueError: erros.append("Prazo de Entrega inválido.")
             
-        # 3. Validação de Lógica Temporal
         if data_compra_obj and prazo_obj:
-            if prazo_obj < data_compra_obj:
-                erros.append("O Prazo de Entrega não pode ser anterior à Data da Compra. Por favor, ajuste as datas.")
+            if prazo_obj < data_compra_obj: erros.append("Prazo não pode ser anterior à Data da Compra.")
         
-        # --- SE HOUVER ERROS, RETORNA E MANTÉM OS DADOS ---
         if erros:
-            for erro in erros:
-                flash(f'🚨 ATENÇÃO: {erro}')
-            
-            # Recarrega a página passando os dados atuais do formulário
+            for erro in erros: flash(f'🚨 {erro}')
             conn.close()
-            return render_template('nova_compra.html', 
-                                   empresas=empresas, 
-                                   usuarios=usuarios, 
-                                   dados_form=dados_form) # Passa os dados preenchidos
+            return render_template('nova_compra.html', empresas=empresas, usuarios=usuarios, dados_form=dados_form)
 
-        # --- SE NÃO HOUVER ERROS, PROSSEGUE COM UPLOAD E DB ---
-        
-        # Lógica de Upload de Arquivo
-        files = request.files.getlist('arquivo') # Múltiplos arquivos
+        files = request.files.getlist('arquivo')
             
-        # 1. Insere o Pedido Principal (usa cursor.lastrowid para o multi-upload)
         cursor = conn.execute('''
             INSERT INTO acompanhamento_compras (
                 numero_solicitacao, numero_orcamento, numero_pedido, item_comprado, categoria, 
@@ -350,18 +347,14 @@ def nova_compra():
             f.get('prazo') or None, f.get('status')
         ))
 
-        pedido_id = cursor.lastrowid # Captura o ID do pedido
-        
-        # 2. Salva Anexos Múltiplos
+        pedido_id = cursor.lastrowid
         salvar_anexos_multiplos(conn, pedido_id, files)
         
         conn.close()
-        flash('✅ Pedido de Compra registrado com sucesso!')
+        flash('✅ Pedido registrado com sucesso!')
         return redirect(url_for('dashboard'))
 
-    # Caso GET (Primeira entrada na página)
     conn.close()
-    # Passa um dict vazio para que o template não quebre ao tentar acessar 'dados_form'
     return render_template('nova_compra.html', empresas=empresas, usuarios=usuarios, dados_form={})
 
 @app.route('/editar_pedido/<int:id>', methods=['GET', 'POST'])
@@ -369,79 +362,61 @@ def editar_pedido(id):
     if 'user_id' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
     
-    # 1. BUSCA DE DADOS COMPARTILHADOS (GET/POST)
     pedido = conn.execute('SELECT * FROM acompanhamento_compras WHERE id = ?', (id,)).fetchone()
     usuarios = conn.execute('SELECT * FROM usuarios WHERE aprovado = 1 ORDER BY nome_completo').fetchall()
     
     if request.method == 'POST':
         f = request.form
-        
-        # 1. Update do Pedido Principal
         conn.execute('''UPDATE acompanhamento_compras SET numero_solicitacao=?, numero_orcamento=?, numero_pedido=?, item_comprado=?, categoria=?, fornecedor=?, data_compra=?, prazo_entrega=?, data_entrega_reprogramada=?, nota_fiscal=?, serie_nota=?, status_compra=?, observacao=?, id_responsavel_chamado=?, id_comprador_responsavel=? WHERE id=?''', 
                      (f['solicitacao'], f.get('orcamento'), f.get('pedido'), f['item'], f.get('categoria'), f['fornecedor'], f.get('data_compra') or None, f.get('prazo') or None, f.get('reprogramada') or None, f.get('nota'), f.get('serie'), f['status'], f.get('observacao'), 
                       f.get('resp_chamado') or None, f.get('resp_comprador') or None, 
                       id))
         
-        # 2. Salva novos Anexos Múltiplos
         files = request.files.getlist('arquivo')
         salvar_anexos_multiplos(conn, id, files)
         
         conn.close()
         flash('✅ Pedido alterado com sucesso!')
-        # Retorna para o dashboard após salvar (Fluxo principal)
         return redirect(url_for('dashboard'))
 
     anexos = conn.execute('SELECT * FROM pedidos_anexos WHERE pedido_id = ?', (id,)).fetchall()
-    
-    conn.close() # Fecha a conexão SOMENTE AGORA, após todas as consultas.
-    
-    # Renderiza o template
+    conn.close()
     return render_template('editar_pedido.html', pedido=pedido, usuarios=usuarios, anexos=anexos)
 
-# --- ROTAS DE EXCLUSÃO (MODIFICADAS) ---
 @app.route('/excluir_pedido/<int:id>')
 def excluir_pedido(id):
     if 'user_id' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
     
-    # 1. Busca todos os arquivos para exclusão física
     anexos = conn.execute('SELECT nome_arquivo FROM pedidos_anexos WHERE pedido_id=?',(id,)).fetchall()
     for anexo in anexos:
         try: os.remove(os.path.join(app.config['UPLOAD_FOLDER'], anexo['nome_arquivo']))
         except: pass
         
-    # 2. Exclui o registro principal (a tabela pedidos_anexos é excluída via ON DELETE CASCADE no DB)
     conn.execute('DELETE FROM acompanhamento_compras WHERE id=?',(id,)); 
     conn.commit()
     conn.close()
     flash('Excluído!'); return redirect(url_for('dashboard'))
 
-# NOVA ROTA: Exclui um anexo individual
 @app.route('/excluir_anexo/<int:anexo_id>')
 def excluir_anexo(anexo_id):
     if 'user_id' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
     
     anexo = conn.execute('SELECT pedido_id, nome_arquivo FROM pedidos_anexos WHERE id=?',(anexo_id,)).fetchone()
-    
     if anexo:
         pedido_id = anexo['pedido_id']
-        # 1. Exclui o arquivo físico
         try: os.remove(os.path.join(app.config['UPLOAD_FOLDER'], anexo['nome_arquivo']))
         except: pass
-        
-        # 2. Exclui o registro do banco
         conn.execute('DELETE FROM pedidos_anexos WHERE id=?',(anexo_id,)); 
         conn.commit()
         conn.close()
-        flash('Anexo removido com sucesso!'); 
+        flash('Anexo removido!'); 
         return redirect(url_for('editar_pedido', id=pedido_id))
     
     conn.close()
-    flash('Anexo não encontrado.');
     return redirect(url_for('dashboard'))
 
-# --- ROTAS ADMIN E LOGOUT (INALTERADO) ---
 @app.route('/admin/usuarios', methods=['GET', 'POST'])
 def admin_usuarios():
     if session.get('user_nivel') != 'admin': return redirect(url_for('dashboard'))
@@ -453,6 +428,5 @@ def admin_usuarios():
 @app.route('/logout')
 def logout(): session.clear(); return redirect(url_for('login'))
 
-# --- CONFIGURAÇÃO DE HOST E PORTA ---
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)

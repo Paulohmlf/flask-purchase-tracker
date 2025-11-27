@@ -45,17 +45,17 @@
             
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
                 <div>
-                    <label>Nº Solicitação (Obrigatório):</label>
+                    <label>Nº Solicitação :</label>
                     <input type="text" name="solicitacao" required placeholder="12345"
                         value="{{ dados_form.get('solicitacao', '') }}">
                 </div>
                 <div>
-                    <label>Nº Orçamento (Opcional):</label>
+                    <label>Nº Orçamento :</label>
                     <input type="text" name="orcamento"
                         value="{{ dados_form.get('orcamento', '') }}">
                 </div>
                 <div>
-                    <label>Nº Pedido (Opcional):</label>
+                    <label>Nº Pedido :</label>
                     <input type="text" name="pedido" placeholder="Ex: PED-999"
                         value="{{ dados_form.get('pedido', '') }}">
                 </div>
@@ -102,7 +102,7 @@
             </div>
             
             <div style="margin-top: 20px;">
-                <label>Responsável pelo Chamado (Opcional):</label>
+                <label>Responsável pelo Chamado:</label>
                 <select name="resp_chamado">
                     <option value="">-- Selecione o Solicitante --</option>
                     {% for u in usuarios %}
@@ -111,7 +111,7 @@
                         </option>
                     {% endfor %}
                 </select>
-                <span class="ajuda-campo">Quem abriu a solicitação de compra.</span>
+                <span class="ajuda-campo">Quem é responsavel pelo chamado.</span>
             </div>
 
             <div style="margin-top: 20px;">
