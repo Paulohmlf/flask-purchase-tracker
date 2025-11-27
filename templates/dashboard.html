@@ -176,6 +176,12 @@
                 </div>
 
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <a href="{{ url_for('ver_pedido', id=p.id) }}" style="flex: 1; text-decoration: none;">
+                        <button style="margin: 0; width: 100%; font-size: 1rem; padding: 10px; background-color: #3498db; box-shadow: none;">
+                            👁️ Ver
+                        </button>
+                    </a>
+
                     <a href="{{ url_for('editar_pedido', id=p.id) }}" style="flex: 1; text-decoration: none;">
                         <button style="margin: 0; width: 100%; font-size: 1rem; padding: 10px; background-color: #f39c12; box-shadow: none;">
                             ✏️ Editar
@@ -188,6 +194,7 @@
                         </button>
                     </a>
                 </div>
+
             </div>
         </div>
         {% endfor %}

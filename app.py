@@ -25,12 +25,11 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-# --- FUNÇÃO HELPER PARA SALVAR MULTIPLOS ARQUIVOS ---
+# --- FUNÇÃO HELPER PARA SALVAR MÚLTIPLOS ARQUIVOS ---
 def salvar_anexos_multiplos(conn, pedido_id, files):
     for arq in files:
         if arq and allowed_file(arq.filename) and arq.filename != '':
             nome_original = arq.filename
-            # Nome seguro evita caracteres especiais e usa timestamp para evitar duplicidade
             nome_seguro = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{nome_original}")
             arq.save(os.path.join(app.config['UPLOAD_FOLDER'], nome_seguro))
             
@@ -39,7 +38,6 @@ def salvar_anexos_multiplos(conn, pedido_id, files):
                 VALUES (?, ?, ?)
             ''', (pedido_id, nome_seguro, nome_original))
     conn.commit()
-
 
 # --- LOGIN E REGISTRO ---
 @app.route('/', methods=['GET', 'POST'])
@@ -83,17 +81,16 @@ def registro():
             flash('Email já existe.')
     return render_template('registro.html')
 
-# --- DASHBOARD TURBINADO ---
+# --- DASHBOARD ---
 @app.route('/dashboard')
 def dashboard():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
+    if 'user_id' not in session: return redirect(url_for('login'))
     
     conn = get_db_connection()
     
-    # 1. Captura dos Filtros da URL
+    # Filtros
     busca = request.args.get('busca', '')
-    f_solicitacao = request.args.get('f_solicitacao', '') # <--- NOVO FILTRO
+    f_solicitacao = request.args.get('f_solicitacao', '')
     f_empresa = request.args.get('f_empresa', '')
     f_comprador = request.args.get('f_comprador', '')
     f_status = request.args.get('f_status', '')
@@ -104,7 +101,6 @@ def dashboard():
     itens_por_pagina = 10
     offset = (pagina - 1) * itens_por_pagina
 
-    # 2. Construção Dinâmica do SQL (WHERE)
     conditions = []
     params = []
 
@@ -113,12 +109,10 @@ def dashboard():
         t = f'%{busca}%'
         params.extend([t, t, t, t])
     
-    # --- LÓGICA DO NOVO FILTRO ---
     if f_solicitacao:
         conditions.append("c.numero_solicitacao LIKE ?")
         params.append(f'%{f_solicitacao}%')
-    # -----------------------------
-    
+
     if f_empresa:
         conditions.append("c.codi_empresa = ?")
         params.append(f_empresa)
@@ -148,9 +142,6 @@ def dashboard():
         LEFT JOIN usuarios u2 ON c.id_comprador_responsavel = u2.id
     """
 
-    # 3. Execução das Queries
-    
-    # A) Tabela Paginada
     total_registros = conn.execute(f'SELECT count(*) {sql_joins} {where_clause}', params).fetchone()[0]
     total_paginas = math.ceil(total_registros / itens_por_pagina)
     
@@ -161,32 +152,23 @@ def dashboard():
     '''
     rows = conn.execute(sql_tabela, params + [itens_por_pagina, offset]).fetchall()
 
-    # B) Gráficos Padrão
+    # Gráficos
     sql_status = f"SELECT c.status_compra, COUNT(*) as qtd {sql_joins} {where_clause} GROUP BY c.status_compra"
     dados_status = conn.execute(sql_status, params).fetchall()
     labels_status = [r['status_compra'] for r in dados_status]
     values_status = [r['qtd'] for r in dados_status]
 
     where_forn = where_clause + " AND " if where_clause else "WHERE "
-    sql_forn = f"""
-        SELECT c.fornecedor, COUNT(*) as qtd {sql_joins} 
-        {where_forn} c.status_compra NOT LIKE '%Entregue%' 
-        GROUP BY c.fornecedor ORDER BY qtd DESC LIMIT 5
-    """
+    sql_forn = f"SELECT c.fornecedor, COUNT(*) as qtd {sql_joins} {where_forn} c.status_compra NOT LIKE '%Entregue%' GROUP BY c.fornecedor ORDER BY qtd DESC LIMIT 5"
     dados_forn = conn.execute(sql_forn, params).fetchall()
     labels_forn = [r['fornecedor'] for r in dados_forn]
     values_forn = [r['qtd'] for r in dados_forn]
 
-    sql_comp = f"""
-        SELECT u2.nome_completo, COUNT(*) as qtd {sql_joins} 
-        {where_forn} c.status_compra NOT LIKE '%Entregue%' 
-        GROUP BY u2.nome_completo
-    """
+    sql_comp = f"SELECT u2.nome_completo, COUNT(*) as qtd {sql_joins} {where_forn} c.status_compra NOT LIKE '%Entregue%' GROUP BY u2.nome_completo"
     dados_comp = conn.execute(sql_comp, params).fetchall()
     labels_comp = [r['nome_completo'] if r['nome_completo'] else 'Sem Comprador' for r in dados_comp]
     values_comp = [r['qtd'] for r in dados_comp]
 
-    # C) KPIs e Linha do Tempo
     sql_kpis = f"SELECT c.status_compra, c.prazo_entrega, c.data_entrega_reprogramada {sql_joins} {where_clause}"
     all_orders = conn.execute(sql_kpis, params).fetchall()
     
@@ -201,83 +183,45 @@ def dashboard():
             if dt_str:
                 try:
                     dt_obj = datetime.strptime(dt_str, '%Y-%m-%d').date()
-                    if (dt_obj - hoje).days <= 0: # Corrigido: 0 ou menos conta como atraso no KPI
+                    if (dt_obj - hoje).days <= 0:
                         kpis['atrasados'] += 1
-                    
                     start_week = dt_obj - timedelta(days=dt_obj.weekday())
                     timeline_data[start_week] += 1
-                except:
-                    pass
+                except: pass
 
     sorted_dates = sorted(timeline_data.keys())
     labels_timeline = [d.strftime('%d/%m') for d in sorted_dates]
     values_timeline = [timeline_data[d] for d in sorted_dates]
 
-    # 4. Dropdowns
     lista_empresas = conn.execute("SELECT * FROM empresas_compras ORDER BY nome_empresa").fetchall()
     lista_compradores = conn.execute("SELECT * FROM usuarios WHERE nivel_acesso IN ('comprador', 'admin') ORDER BY nome_completo").fetchall()
-    lista_status = [
-        "Aguardando Aprovação", "Enviado ao Fornecedor", "Confirmado", 
-        "Em Trânsito", "Entregue Parcialmente", "Entregue Totalmente"
-    ]
+    lista_status = ["Aguardando Aprovação", "Orçamento", "Confirmado", "Em Trânsito", "Entregue Parcialmente", "Entregue Totalmente"]
 
     conn.close()
 
-    # Processamento Visual e Lógica de Cores da Imagem
     pedidos = [dict(row) for row in rows]
-    
     for p in pedidos:
         s = p['status_compra']
-        
-        # Definição de cores do Status do Pedido
         if s == 'Aguardando Aprovação': p.update({'cor_s': '#9b59b6', 'txt_s': 'ORÇAMENTO'})
-        elif s in ['Confirmado', 'Enviado ao Fornecedor', 'Em Trânsito']: p.update({'cor_s': '#3498db', 'txt_s': 'COMPRADO'})
+        elif s in ['Confirmado', 'Orçamento', 'Em Trânsito']: p.update({'cor_s': '#3498db', 'txt_s': 'COMPRADO'})
         elif 'Entregue' in s: p.update({'cor_s': '#2ecc71', 'txt_s': 'ENTREGUE'})
         else: p.update({'cor_s': '#95a5a6', 'txt_s': s})
 
-        # Lógica de Prazos (Baseada na Imagem Enviada)
         dt_str = p['data_entrega_reprogramada'] or p['prazo_entrega']
-        
         if dt_str and 'Entregue' not in s:
             try:
                 dias = (datetime.strptime(dt_str, '%Y-%m-%d').date() - hoje).days
-                
-                if dias <= 0: 
-                    # 🔴 0 DIAS (ou menos) -> ATRASADO
-                    p.update({
-                        'cor_p': '#e74c3c', 
-                        'txt_p': 'ATRASADO', 
-                        'cor_s': '#e74c3c', 
-                        'txt_s': 'ATRASADO'
-                    })
-                elif dias <= 2: 
-                    # 🟡 2 A 1 DIAS -> ATENÇÃO
-                    p.update({
-                        'cor_p': '#f1c40f', 
-                        'txt_p': 'ATENÇÃO'
-                    })
-                else: 
-                    # 🟢 5 A 3 DIAS (ou mais) -> NO PRAZO
-                    p.update({
-                        'cor_p': '#2ecc71', 
-                        'txt_p': 'NO PRAZO'
-                    })
-            except: 
-                p.update({'cor_p': 'transparent', 'txt_p': '-'})
-        else: 
-            p.update({'cor_p': 'transparent', 'txt_p': '-'})
+                if dias <= 0: p.update({'cor_p': '#e74c3c', 'txt_p': 'ATRASADO', 'cor_s': '#e74c3c', 'txt_s': 'ATRASADO'})
+                elif dias <= 2: p.update({'cor_p': '#f1c40f', 'txt_p': 'ATENÇÃO'})
+                else: p.update({'cor_p': '#2ecc71', 'txt_p': 'NO PRAZO'})
+            except: p.update({'cor_p': 'transparent', 'txt_p': '-'})
+        else: p.update({'cor_p': 'transparent', 'txt_p': '-'})
+        
+        if p['prazo_entrega']: p['prazo_entrega'] = datetime.strptime(p['prazo_entrega'], '%Y-%m-%d').strftime('%d/%m/%Y')
+        if p['data_entrega_reprogramada']: p['data_entrega_reprogramada'] = datetime.strptime(p['data_entrega_reprogramada'], '%Y-%m-%d').strftime('%d/%m/%Y')
 
-        # Formatação de Datas para Exibição
-        if p['prazo_entrega']:
-            p['prazo_entrega'] = datetime.strptime(p['prazo_entrega'], '%Y-%m-%d').strftime('%d/%m/%Y')
-        if p['data_entrega_reprogramada']:
-            p['data_entrega_reprogramada'] = datetime.strptime(p['data_entrega_reprogramada'], '%Y-%m-%d').strftime('%d/%m/%Y')
-
-    return render_template('dashboard.html', 
-                           pedidos=pedidos, pagina=pagina, total_paginas=total_paginas,
-                           busca=busca, 
-                           f_solicitacao=f_solicitacao, # <--- ENVIAR PARA O TEMPLATE
-                           f_empresa=f_empresa, f_comprador=f_comprador, f_status=f_status,
+    return render_template('dashboard.html', pedidos=pedidos, pagina=pagina, total_paginas=total_paginas,
+                           busca=busca, f_solicitacao=f_solicitacao, f_empresa=f_empresa, f_comprador=f_comprador, f_status=f_status,
                            f_data_inicio=f_data_inicio, f_data_fim=f_data_fim,
                            lista_empresas=lista_empresas, lista_compradores=lista_compradores, lista_status=lista_status,
                            kpis=kpis,
@@ -286,10 +230,10 @@ def dashboard():
                            graf_comp={'labels': labels_comp, 'values': values_comp},
                            graf_timeline={'labels': labels_timeline, 'values': values_timeline})
 
+# --- NOVA COMPRA (ATUALIZADA PARA MÚLTIPLOS ITENS) ---
 @app.route('/nova_compra', methods=['GET', 'POST'])
 def nova_compra():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
+    if 'user_id' not in session: return redirect(url_for('login'))
     
     conn = get_db_connection()
     empresas = conn.execute('SELECT * FROM empresas_compras').fetchall()
@@ -302,37 +246,40 @@ def nova_compra():
         dados_form = f
         erros = []
         
-        if not f.get('item'): erros.append("O item a ser comprado é obrigatório.")
+        # 1. Validação dos Itens (Agora é uma lista!)
+        nomes_itens = f.getlist('nome_item[]')
+        qtds_itens = f.getlist('qtd[]')
+        
+        if not nomes_itens or not nomes_itens[0]:
+            erros.append("O item a ser comprado é obrigatório (pelo menos um).")
+            
         if not f.get('fornecedor'): erros.append("O Fornecedor é obrigatório.")
         if not f.get('solicitacao'): erros.append("O Número da Solicitação é obrigatório.")
         if not f.get('empresa'): erros.append("A Unidade solicitante é obrigatória.")
         
+        # Validação de Datas
         data_compra_str = f.get('data_compra')
         prazo_str = f.get('prazo')
-        data_compra_obj = None
-        prazo_obj = None
         hoje = date.today()
         
         if data_compra_str:
             try:
-                data_compra_obj = datetime.strptime(data_compra_str, '%Y-%m-%d').date()
-                if data_compra_obj > hoje: erros.append("Data da Compra não pode ser futura.")
-            except ValueError: erros.append("Data da Compra inválida.")
-
-        if prazo_str:
-            try: prazo_obj = datetime.strptime(prazo_str, '%Y-%m-%d').date()
-            except ValueError: erros.append("Prazo de Entrega inválido.")
+                dt_obj = datetime.strptime(data_compra_str, '%Y-%m-%d').date()
+                if dt_obj > hoje: erros.append("Data da Compra não pode ser futura.")
+            except: erros.append("Data da Compra inválida.")
             
-        if data_compra_obj and prazo_obj:
-            if prazo_obj < data_compra_obj: erros.append("Prazo não pode ser anterior à Data da Compra.")
-        
         if erros:
             for erro in erros: flash(f'🚨 {erro}')
             conn.close()
             return render_template('nova_compra.html', empresas=empresas, usuarios=usuarios, dados_form=dados_form)
 
-        files = request.files.getlist('arquivo')
-            
+        # 2. Definir o Título do Pedido (Resumo)
+        # Se tiver mais de 1 item, coloca "Item 1 + X itens"
+        item_titulo = nomes_itens[0]
+        if len(nomes_itens) > 1:
+            item_titulo += f" (+ {len(nomes_itens)-1} itens)"
+
+        # 3. Inserir Pedido Principal (Cabeçalho)
         cursor = conn.execute('''
             INSERT INTO acompanhamento_compras (
                 numero_solicitacao, numero_orcamento, numero_pedido, item_comprado, categoria, 
@@ -341,13 +288,31 @@ def nova_compra():
                 prazo_entrega, status_compra
             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ''', (
-            f.get('solicitacao'), f.get('orcamento'), f.get('pedido'), f.get('item'), f.get('categoria'), 
+            f.get('solicitacao'), f.get('orcamento'), f.get('pedido'), item_titulo, f.get('categoria'), 
             f.get('fornecedor'), f.get('data_compra') or None, f.get('nota'), f.get('serie'), 
             f.get('observacao'), f.get('empresa'), f.get('resp_chamado') or None, f.get('resp_comprador') or None, 
             f.get('prazo') or None, f.get('status')
         ))
 
         pedido_id = cursor.lastrowid
+
+        # 4. Inserir os Itens na Tabela Filha
+        unidades = f.getlist('unidade[]')
+        
+        # Loop seguro (zipando as listas)
+        for i in range(len(nomes_itens)):
+            nome = nomes_itens[i]
+            qtd = qtds_itens[i] if i < len(qtds_itens) else 1
+            unid = unidades[i] if i < len(unidades) else 'UN'
+            
+            if nome.strip(): # Só insere se tiver nome
+                conn.execute('''
+                    INSERT INTO pedidos_itens (pedido_id, nome_item, quantidade, unidade_medida)
+                    VALUES (?, ?, ?, ?)
+                ''', (pedido_id, nome, qtd, unid))
+
+        # 5. Salvar Anexos
+        files = request.files.getlist('arquivo')
         salvar_anexos_multiplos(conn, pedido_id, files)
         
         conn.close()
@@ -357,6 +322,7 @@ def nova_compra():
     conn.close()
     return render_template('nova_compra.html', empresas=empresas, usuarios=usuarios, dados_form={})
 
+# --- EDIÇÃO (ATUALIZADA PARA MÚLTIPLOS ITENS) ---
 @app.route('/editar_pedido/<int:id>', methods=['GET', 'POST'])
 def editar_pedido(id):
     if 'user_id' not in session: return redirect(url_for('login'))
@@ -367,11 +333,63 @@ def editar_pedido(id):
     
     if request.method == 'POST':
         f = request.form
-        conn.execute('''UPDATE acompanhamento_compras SET numero_solicitacao=?, numero_orcamento=?, numero_pedido=?, item_comprado=?, categoria=?, fornecedor=?, data_compra=?, prazo_entrega=?, data_entrega_reprogramada=?, nota_fiscal=?, serie_nota=?, status_compra=?, observacao=?, id_responsavel_chamado=?, id_comprador_responsavel=? WHERE id=?''', 
-                     (f['solicitacao'], f.get('orcamento'), f.get('pedido'), f['item'], f.get('categoria'), f['fornecedor'], f.get('data_compra') or None, f.get('prazo') or None, f.get('reprogramada') or None, f.get('nota'), f.get('serie'), f['status'], f.get('observacao'), 
-                      f.get('resp_chamado') or None, f.get('resp_comprador') or None, 
-                      id))
         
+        # 1. Atualizar Cabeçalho do Pedido
+        # Atualizamos também o 'item_comprado' (Título) baseado no primeiro item da lista nova
+        nomes_itens = f.getlist('nome_item[]')
+        novo_titulo = pedido['item_comprado'] # Mantém o antigo por padrão
+        if nomes_itens:
+            novo_titulo = nomes_itens[0]
+            if len(nomes_itens) > 1:
+                novo_titulo += f" (+ {len(nomes_itens)-1} itens)"
+        
+        conn.execute('''UPDATE acompanhamento_compras SET 
+            numero_solicitacao=?, numero_orcamento=?, numero_pedido=?, item_comprado=?, categoria=?, 
+            fornecedor=?, data_compra=?, prazo_entrega=?, data_entrega_reprogramada=?, 
+            nota_fiscal=?, serie_nota=?, status_compra=?, observacao=?, 
+            id_responsavel_chamado=?, id_comprador_responsavel=? 
+            WHERE id=?''', 
+            (f['solicitacao'], f.get('orcamento'), f.get('pedido'), novo_titulo, f.get('categoria'), 
+             f['fornecedor'], f.get('data_compra') or None, f.get('prazo') or None, f.get('reprogramada') or None, 
+             f.get('nota'), f.get('serie'), f['status'], f.get('observacao'), 
+             f.get('resp_chamado') or None, f.get('resp_comprador') or None, 
+             id))
+        
+        # 2. Gerir Itens (Adicionar, Atualizar, Remover)
+        ids_itens = f.getlist('item_id[]')
+        qtds_itens = f.getlist('qtd[]')
+        unidades = f.getlist('unidade[]')
+        
+        # A) Remover itens excluídos
+        itens_para_remover = f.get('itens_para_remover')
+        if itens_para_remover:
+            lista_ids = itens_para_remover.split(',')
+            for id_rem in lista_ids:
+                if id_rem:
+                    conn.execute('DELETE FROM pedidos_itens WHERE id = ?', (id_rem,))
+
+        # B) Atualizar ou Inserir
+        for i in range(len(nomes_itens)):
+            item_id = ids_itens[i]
+            nome = nomes_itens[i]
+            qtd = qtds_itens[i]
+            unid = unidades[i]
+            
+            if nome.strip():
+                if item_id: 
+                    # Se tem ID, atualiza
+                    conn.execute('''
+                        UPDATE pedidos_itens SET nome_item=?, quantidade=?, unidade_medida=?
+                        WHERE id=?
+                    ''', (nome, qtd, unid, item_id))
+                else:
+                    # Se ID está vazio, insere novo
+                    conn.execute('''
+                        INSERT INTO pedidos_itens (pedido_id, nome_item, quantidade, unidade_medida)
+                        VALUES (?, ?, ?, ?)
+                    ''', (id, nome, qtd, unid))
+        
+        # 3. Salvar Novos Anexos
         files = request.files.getlist('arquivo')
         salvar_anexos_multiplos(conn, id, files)
         
@@ -379,15 +397,19 @@ def editar_pedido(id):
         flash('✅ Pedido alterado com sucesso!')
         return redirect(url_for('dashboard'))
 
+    # Carregar Itens e Anexos para exibir
+    itens = conn.execute('SELECT * FROM pedidos_itens WHERE pedido_id = ?', (id,)).fetchall()
     anexos = conn.execute('SELECT * FROM pedidos_anexos WHERE pedido_id = ?', (id,)).fetchall()
+    
     conn.close()
-    return render_template('editar_pedido.html', pedido=pedido, usuarios=usuarios, anexos=anexos)
+    return render_template('editar_pedido.html', pedido=pedido, usuarios=usuarios, anexos=anexos, itens=itens)
 
 @app.route('/excluir_pedido/<int:id>')
 def excluir_pedido(id):
     if 'user_id' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
     
+    # Apagar arquivos físicos
     anexos = conn.execute('SELECT nome_arquivo FROM pedidos_anexos WHERE pedido_id=?',(id,)).fetchall()
     for anexo in anexos:
         try: os.remove(os.path.join(app.config['UPLOAD_FOLDER'], anexo['nome_arquivo']))
@@ -416,6 +438,38 @@ def excluir_anexo(anexo_id):
     
     conn.close()
     return redirect(url_for('dashboard'))
+
+# --- ROTA DE VISUALIZAÇÃO (SOMENTE LEITURA) ---
+@app.route('/ver_pedido/<int:id>')
+def ver_pedido(id):
+    if 'user_id' not in session: return redirect(url_for('login'))
+    conn = get_db_connection()
+    
+    # Fazemos JOIN para já pegar os nomes das pessoas e da empresa
+    sql = '''
+        SELECT c.*, 
+               e.nome_empresa, 
+               u_solic.nome_completo as nome_solicitante,
+               u_comp.nome_completo as nome_comprador
+        FROM acompanhamento_compras c
+        LEFT JOIN empresas_compras e ON c.codi_empresa = e.codi_empresa
+        LEFT JOIN usuarios u_solic ON c.id_responsavel_chamado = u_solic.id
+        LEFT JOIN usuarios u_comp ON c.id_comprador_responsavel = u_comp.id
+        WHERE c.id = ?
+    '''
+    pedido = conn.execute(sql, (id,)).fetchone()
+    
+    # Buscar os itens e anexos
+    itens = conn.execute('SELECT * FROM pedidos_itens WHERE pedido_id = ?', (id,)).fetchall()
+    anexos = conn.execute('SELECT * FROM pedidos_anexos WHERE pedido_id = ?', (id,)).fetchall()
+    
+    conn.close()
+    
+    if not pedido:
+        flash('Pedido não encontrado.')
+        return redirect(url_for('dashboard'))
+
+    return render_template('ver_pedido.html', pedido=pedido, itens=itens, anexos=anexos)
 
 @app.route('/admin/usuarios', methods=['GET', 'POST'])
 def admin_usuarios():

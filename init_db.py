@@ -2,10 +2,11 @@ import sqlite3
 from werkzeug.security import generate_password_hash
 
 def criar_banco():
+    print("🔄 Criando tabelas do banco de dados...")
     connection = sqlite3.connect('database.db')
     cursor = connection.cursor()
     
-    # 1. Usuários (Inalterado)
+    # 1. Tabela de Usuários
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -17,7 +18,7 @@ def criar_banco():
     )
     ''')
 
-    # 2. Empresas (Inalterado, com as empresas do CSV)
+    # 2. Tabela de Empresas (Unidades)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS empresas_compras (
         codi_empresa INTEGER PRIMARY KEY,
@@ -25,7 +26,8 @@ def criar_banco():
     )
     ''')
 
-    # 3. Acompanhamento (⚠️ Coluna arquivo_anexo REMOVIDA)
+    # 3. Tabela Principal do Pedido (Cabeçalho)
+    # Mantivemos 'item_comprado' para servir como Título/Resumo do pedido no Dashboard
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS acompanhamento_compras (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,14 +35,13 @@ def criar_banco():
         numero_solicitacao TEXT NOT NULL,
         numero_orcamento TEXT,
         numero_pedido TEXT,
-        item_comprado TEXT,
-        categoria TEXT,                    
+        item_comprado TEXT,  -- Agora serve como "Título do Pedido" ou "Assunto"
+        categoria TEXT,      -- Categoria principal do pedido
         fornecedor TEXT,
         data_compra TEXT,
         
         nota_fiscal TEXT,
         serie_nota TEXT,
-        -- REMOVIDA: arquivo_anexo TEXT, 
         observacao TEXT,                   
         
         codi_empresa INTEGER NOT NULL,
@@ -56,7 +57,22 @@ def criar_banco():
     )
     ''')
     
-    # 4. NOVA TABELA: Múltiplos Anexos
+    # 4. NOVA TABELA: Itens do Pedido (Produtos) 
+    # Aqui ficam os detalhes de cada produto (1 Pedido -> Vários Itens)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS pedidos_itens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pedido_id INTEGER NOT NULL,
+        nome_item TEXT NOT NULL,
+        categoria TEXT,
+        quantidade INTEGER DEFAULT 1,
+        unidade_medida TEXT DEFAULT 'UN',
+        valor_estimado REAL DEFAULT 0.0,
+        FOREIGN KEY (pedido_id) REFERENCES acompanhamento_compras (id) ON DELETE CASCADE
+    )
+    ''')
+    
+    # 5. Tabela de Múltiplos Anexos
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS pedidos_anexos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,14 +84,18 @@ def criar_banco():
     )
     ''')
     
-    # --- DADOS INICIAIS ---
+    # --- DADOS INICIAIS (SEED) ---
+    
+    # Criar Administrador Padrão
     senha_admin = generate_password_hash('123456')
     try:
         cursor.execute("INSERT INTO usuarios (nome_completo, email, senha, nivel_acesso, aprovado) VALUES (?, ?, ?, ?, ?)",
                        ('Administrador', 'admin@nutrane.com.br', senha_admin, 'admin', 1))
-    except sqlite3.IntegrityError: pass
+        print("👤 Usuário Admin criado.")
+    except sqlite3.IntegrityError: 
+        print("👤 Usuário Admin já existe.")
 
-    # Empresas Reais (BASEADO NO CSV)
+    # Criar Empresas/Unidades do CSV
     empresas = [
         (2, 'Durancho Sertania'),
         (7, 'Nutrane Bahia'),
@@ -86,12 +106,12 @@ def criar_banco():
     ]
     try:
         cursor.executemany("REPLACE INTO empresas_compras (codi_empresa, nome_empresa) VALUES (?, ?)", empresas)
-        print("Unidades (Filiais) atualizadas conforme CSV!")
+        print("🏢 Unidades (Filiais) cadastradas.")
     except sqlite3.IntegrityError: pass
 
     connection.commit()
     connection.close()
-    print("Banco recriado com Múltiplos Anexos e Novas Unidades!")
+    print("✅ Banco de dados recriado com sucesso (Estrutura Completa)!")
 
 if __name__ == '__main__':
     criar_banco()

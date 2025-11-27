@@ -1,18 +1,22 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card" style="max-width: 800px; margin: 0 auto; border-top: 6px solid #f39c12;">
+<div class="card" style="max-width: 900px; margin: 0 auto; border-top: 6px solid #f39c12;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h2 style="margin: 0; border: none;">✏️ Editando Pedido #{{ pedido.id }}</h2>
+        <a href="{{ url_for('dashboard') }}" style="color: #e74c3c; font-weight: bold; text-decoration: none;">
+            ✖ Cancelar
+        </a>
     </div>
     
     <form method="POST" enctype="multipart/form-data">
-        
+        <input type="hidden" name="itens_para_remover" id="itens_para_remover" value="">
+
         <div style="background-color: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #ffeeba;">
             <label style="margin-top: 0; color: #856404;">Qual a situação atual?</label>
             <select name="status" style="font-weight: bold; font-size: 1.2rem; border-color: #f39c12;">
                 <option value="Aguardando Aprovação" {% if pedido.status_compra == 'Aguardando Aprovação' %}selected{% endif %}>🟡 Aguardando Aprovação</option>
-                <option value="Enviado ao Fornecedor" {% if pedido.status_compra == 'Enviado ao Fornecedor' %}selected{% endif %}>🔵 Enviado ao Fornecedor</option>
+                <option value="Orçamento" {% if pedido.status_compra == 'Orçamento' %}selected{% endif %}>🟣 Orçamento</option>
                 <option value="Confirmado" {% if pedido.status_compra == 'Confirmado' %}selected{% endif %}>🔵 Confirmado</option>
                 <option value="Em Trânsito" {% if pedido.status_compra == 'Em Trânsito' %}selected{% endif %}>🚚 Em Trânsito</option>
                 <option value="Entregue Parcialmente" {% if pedido.status_compra == 'Entregue Parcialmente' %}selected{% endif %}>📦 Entregue Parcialmente</option>
@@ -20,11 +24,55 @@
             </select>
         </div>
 
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #e9ecef;">
+            <h3 style="color: var(--azul-acao); margin-top: 0;">📦 Itens do Pedido</h3>
+            
+            <div style="display: grid; grid-template-columns: 4fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 5px; font-weight: bold; color: #555; font-size: 0.9rem;">
+                <div>Descrição</div>
+                <div>Qtd</div>
+                <div>Unid.</div>
+                <div></div>
+            </div>
+
+            <div id="lista-itens">
+                {% for item in itens %}
+                <div class="linha-item" style="display: grid; grid-template-columns: 4fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 10px; align-items: center;">
+                    <input type="hidden" name="item_id[]" value="{{ item.id }}">
+                    
+                    <input type="text" name="nome_item[]" value="{{ item.nome_item }}" required style="font-weight: bold;">
+                    <input type="number" name="qtd[]" value="{{ item.quantidade }}" required min="1" style="text-align: center;">
+                    
+                    <select name="unidade[]" style="padding: 10px;">
+                        <option value="UN" {% if item.unidade_medida == 'UN' %}selected{% endif %}>UN</option>
+                        <option value="CX" {% if item.unidade_medida == 'CX' %}selected{% endif %}>CX</option>
+                        <option value="PCT" {% if item.unidade_medida == 'PCT' %}selected{% endif %}>PCT</option>
+                        <option value="KG" {% if item.unidade_medida == 'KG' %}selected{% endif %}>KG</option>
+                        <option value="M" {% if item.unidade_medida == 'M' %}selected{% endif %}>M</option>
+                        <option value="L" {% if item.unidade_medida == 'L' %}selected{% endif %}>L</option>
+                    </select>
+
+                    <button type="button" onclick="removerItemExistente(this, '{{ item.id }}')" style="background: #fab1a0; color: #c0392b; padding: 10px; margin: 0;">
+                        ✖
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+
+            <button type="button" onclick="adicionarItem()" style="background-color: #3498db; width: 100%; margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <span class="material-icons">add_circle</span> Adicionar Outro Item
+            </button>
+        </div>
+
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px;">
             <div>
-                <label>Item:</label><input type="text" name="item" value="{{ pedido.item_comprado }}" required style="background: #f9f9f9;">
-                <label>Fornecedor:</label><input type="text" name="fornecedor" value="{{ pedido.fornecedor }}" required style="background: #f9f9f9;">
-                <label>Categoria:</label><input type="text" name="categoria" value="{{ pedido.categoria or '' }}" placeholder="Ex: Rolamento">
+                <label>Título / Resumo do Pedido:</label>
+                <input type="text" name="item" value="{{ pedido.item_comprado }}" required style="background: #f9f9f9; font-weight: bold;">
+                
+                <label>Fornecedor:</label>
+                <input type="text" name="fornecedor" value="{{ pedido.fornecedor }}" required style="background: #f9f9f9;">
+                
+                <label>Categoria Principal:</label>
+                <input type="text" name="categoria" value="{{ pedido.categoria or '' }}" placeholder="Ex: Material de Escritório">
                 
                 <hr style="margin: 20px 0;">
 
@@ -55,7 +103,6 @@
                         </option>
                     {% endfor %}
                 </select>
-                <span class="ajuda-campo">O responsável por fazer a compra.</span>
                 
                 <label>Responsável pelo Chamado:</label>
                 <select name="resp_chamado">
@@ -66,7 +113,6 @@
                         </option>
                     {% endfor %}
                 </select>
-                <span class="ajuda-campo">Quem abriu a solicitação de compra.</span>
             </div>
             
             <div style="grid-column: 1 / -1;">
@@ -101,8 +147,6 @@
                 <span id="texto-arquivo-edit" style="font-size: 1.1rem; color: #555;">Toque aqui para escolher novos arquivos</span>
             </label>
             <input type="file" id="arquivo" name="arquivo" accept=".pdf,.jpg,.jpeg,.png" multiple style="display: none;" onchange="mostrarNomeArquivoEdit()">
-            <span class="ajuda-campo">Você pode selecionar um ou mais arquivos de uma vez.</span>
-
         </div>
 
         <div style="display: flex; gap: 15px; margin-top: 30px;">
@@ -116,25 +160,80 @@
     </form>
 </div>
 
+<template id="template-novo-item">
+    <div class="linha-item" style="display: grid; grid-template-columns: 4fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 10px; align-items: center;">
+        <input type="hidden" name="item_id[]" value=""> 
+        
+        <input type="text" name="nome_item[]" placeholder="Nome do Item" required style="font-weight: bold;">
+        <input type="number" name="qtd[]" value="1" required min="1" style="text-align: center;">
+        
+        <select name="unidade[]" style="padding: 10px;">
+            <option value="UN">UN</option>
+            <option value="CX">CX</option>
+            <option value="PCT">PCT</option>
+            <option value="KG">KG</option>
+            <option value="M">M</option>
+            <option value="L">L</option>
+        </select>
+
+        <button type="button" onclick="removerItemNovo(this)" style="background: #fab1a0; color: #c0392b; padding: 10px; margin: 0;">
+            ✖
+        </button>
+    </div>
+</template>
+
 <script>
-    // Lógica para dar feedback visual sobre a contagem de arquivos para a EDIÇÃO
+    // 1. Adicionar Novo Item (Clonando o template)
+    function adicionarItem() {
+        const container = document.getElementById('lista-itens');
+        const template = document.getElementById('template-novo-item');
+        const clone = template.content.cloneNode(true);
+        container.appendChild(clone);
+    }
+
+    // 2. Remover Item que ACABOU de ser criado (não existe no banco)
+    function removerItemNovo(btn) {
+        btn.parentElement.remove();
+    }
+
+    // 3. Remover Item que JÁ EXISTE no banco (Marca para exclusão)
+    function removerItemExistente(btn, idItem) {
+        if(confirm("Tem certeza que deseja remover este item do pedido?")) {
+            // Adiciona o ID ao input oculto, separado por vírgula
+            let inputRemover = document.getElementById('itens_para_remover');
+            if (inputRemover.value) {
+                inputRemover.value += "," + idItem;
+            } else {
+                inputRemover.value = idItem;
+            }
+            // Remove visualmente
+            btn.parentElement.remove();
+        }
+    }
+
+    // Feedback visual de arquivos
     function mostrarNomeArquivoEdit() {
         var input = document.getElementById('arquivo');
         var texto = document.getElementById('texto-arquivo-edit');
         if (input.files && input.files.length > 0) {
-            var count = input.files.length;
-            texto.innerText = "✅ " + count + " novo(s) arquivo(s) pronto(s) para upload";
-            texto.style.fontWeight = "bold";
+            texto.innerText = "✅ " + input.files.length + " novo(s) arquivo(s) pronto(s) para upload";
             texto.style.color = "var(--verde-sucesso)";
             texto.parentElement.style.borderColor = "var(--verde-sucesso)";
             texto.parentElement.style.backgroundColor = "#e8f5e9";
-        } else {
-             texto.innerText = "Toque aqui para escolher novos arquivos";
-             texto.style.fontWeight = "";
-             texto.style.color = "#555";
-             texto.parentElement.style.borderColor = "#999";
-             texto.parentElement.style.backgroundColor = "white";
         }
     }
 </script>
+
+<style>
+    @media (max-width: 600px) {
+        .linha-item {
+            grid-template-columns: 1fr 1fr !important;
+            border-bottom: 2px dashed #ddd;
+            padding-bottom: 10px;
+        }
+        .linha-item input[name="nome_item[]"] {
+            grid-column: span 2;
+        }
+    }
+</style>
 {% endblock %}
