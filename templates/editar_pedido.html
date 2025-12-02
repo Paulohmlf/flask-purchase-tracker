@@ -3,8 +3,8 @@
 {% block content %}
 <div class="card" style="max-width: 900px; margin: 0 auto; border-top: 6px solid #f39c12;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h2 style="margin: 0; border: none;">✏️ Editando Pedido #{{ pedido.id }}</h2>
-        <a href="{{ url_for('dashboard') }}" style="color: #e74c3c; font-weight: bold; text-decoration: none;">
+        <h1 style="margin: 0; border: none; font-size: 1.8rem; color: #2c3e50;">✏️ Editando Pedido #{{ pedido.id }}</h1>
+        <a href="{{ url_for('dashboard') }}" style="color: #c0392b; font-weight: bold; text-decoration: none;" aria-label="Cancelar e voltar para dashboard">
             ✖ Cancelar
         </a>
     </div>
@@ -12,9 +12,9 @@
     <form method="POST" enctype="multipart/form-data">
         <input type="hidden" name="itens_para_remover" id="itens_para_remover" value="">
 
-        <div style="background-color: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #ffeeba;">
-            <label style="margin-top: 0; color: #856404;">Qual a situação atual?</label>
-            <select name="status" style="font-weight: bold; font-size: 1.2rem; border-color: #f39c12;">
+        <section style="background-color: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #ffeeba;">
+            <label for="id_status" style="margin-top: 0; color: #856404;">Qual a situação atual?</label>
+            <select id="id_status" name="status" style="font-weight: bold; font-size: 1.2rem; border-color: #f39c12;">
                 <option value="Aguardando Aprovação" {% if pedido.status_compra == 'Aguardando Aprovação' %}selected{% endif %}>🟡 Aguardando Aprovação</option>
                 <option value="Orçamento" {% if pedido.status_compra == 'Orçamento' %}selected{% endif %}>🟣 Orçamento</option>
                 <option value="Confirmado" {% if pedido.status_compra == 'Confirmado' %}selected{% endif %}>🔵 Confirmado</option>
@@ -22,10 +22,10 @@
                 <option value="Entregue Parcialmente" {% if pedido.status_compra == 'Entregue Parcialmente' %}selected{% endif %}>📦 Entregue Parcialmente</option>
                 <option value="Entregue Totalmente" {% if pedido.status_compra == 'Entregue Totalmente' %}selected{% endif %}>✅ Entregue Totalmente</option>
             </select>
-        </div>
+        </section>
 
-        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #e9ecef;">
-            <h3 style="color: var(--azul-acao); margin-top: 0;">📦 Itens do Pedido</h3>
+        <section style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #e9ecef;">
+            <h2 style="color: var(--azul-acao); margin-top: 0; font-size: 1.4rem;">📦 Itens do Pedido</h2>
             
             <div style="display: grid; grid-template-columns: 4fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 5px; font-weight: bold; color: #555; font-size: 0.9rem;">
                 <div>Descrição</div>
@@ -39,10 +39,10 @@
                 <div class="linha-item" style="display: grid; grid-template-columns: 4fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 10px; align-items: center;">
                     <input type="hidden" name="item_id[]" value="{{ item.id }}">
                     
-                    <input type="text" name="nome_item[]" value="{{ item.nome_item }}" required style="font-weight: bold;">
-                    <input type="number" name="qtd[]" value="{{ item.quantidade }}" required min="1" style="text-align: center;">
+                    <input type="text" name="nome_item[]" value="{{ item.nome_item }}" required style="font-weight: bold;" aria-label="Descrição do Item">
+                    <input type="number" name="qtd[]" value="{{ item.quantidade }}" required min="1" style="text-align: center;" aria-label="Quantidade">
                     
-                    <select name="unidade[]" style="padding: 10px;">
+                    <select name="unidade[]" style="padding: 10px;" aria-label="Unidade de Medida">
                         <option value="UN" {% if item.unidade_medida == 'UN' %}selected{% endif %}>UN</option>
                         <option value="CX" {% if item.unidade_medida == 'CX' %}selected{% endif %}>CX</option>
                         <option value="PCT" {% if item.unidade_medida == 'PCT' %}selected{% endif %}>PCT</option>
@@ -51,7 +51,7 @@
                         <option value="L" {% if item.unidade_medida == 'L' %}selected{% endif %}>L</option>
                     </select>
 
-                    <button type="button" onclick="removerItemExistente(this, '{{ item.id }}')" style="background: #fab1a0; color: #c0392b; padding: 10px; margin: 0;">
+                    <button type="button" onclick="removerItemExistente(this, '{{ item.id }}')" style="background: #fab1a0; color: #c0392b; padding: 10px; margin: 0;" aria-label="Remover item {{ item.nome_item }}">
                         ✖
                     </button>
                 </div>
@@ -61,41 +61,53 @@
             <button type="button" onclick="adicionarItem()" style="background-color: #3498db; width: 100%; margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 10px;">
                 <span class="material-icons">add_circle</span> Adicionar Outro Item
             </button>
-        </div>
+        </section>
 
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px;">
             <div>
-                <label>Título / Resumo do Pedido:</label>
-                <input type="text" name="item" value="{{ pedido.item_comprado }}" required style="background: #f9f9f9; font-weight: bold;">
+                <label for="id_item">Título / Resumo do Pedido:</label>
+                <input type="text" id="id_item" name="item" value="{{ pedido.item_comprado }}" required style="background: #f9f9f9; font-weight: bold;">
                 
-                <label>Fornecedor:</label>
-                <input type="text" name="fornecedor" value="{{ pedido.fornecedor }}" required style="background: #f9f9f9;">
+                <label for="id_fornecedor">Fornecedor:</label>
+                <input type="text" id="id_fornecedor" name="fornecedor" value="{{ pedido.fornecedor }}" required style="background: #f9f9f9;">
                 
-                <label>Categoria Principal:</label>
-                <input type="text" name="categoria" value="{{ pedido.categoria or '' }}" placeholder="Ex: Material de Escritório">
+                <label for="id_categoria">Categoria Principal:</label>
+                <input type="text" id="id_categoria" name="categoria" value="{{ pedido.categoria or '' }}" placeholder="Ex: Material de Escritório">
                 
                 <hr style="margin: 20px 0;">
 
-                <label>Nº Solicitação:</label><input type="text" name="solicitacao" value="{{ pedido.numero_solicitacao }}" required>
-                <label>Nº Orçamento:</label><input type="text" name="orcamento" value="{{ pedido.numero_orcamento or '' }}">
-                <label>Nº Pedido:</label><input type="text" name="pedido" value="{{ pedido.numero_pedido or '' }}">
+                <label for="id_solicitacao">Nº Solicitação:</label>
+                <input type="text" id="id_solicitacao" name="solicitacao" value="{{ pedido.numero_solicitacao }}" required>
+                
+                <label for="id_orcamento">Nº Orçamento:</label>
+                <input type="text" id="id_orcamento" name="orcamento" value="{{ pedido.numero_orcamento or '' }}">
+                
+                <label for="id_pedido">Nº Pedido:</label>
+                <input type="text" id="id_pedido" name="pedido" value="{{ pedido.numero_pedido or '' }}">
             </div>
             
             <div>
-                <label>Data da Compra:</label><input type="date" name="data_compra" value="{{ pedido.data_compra or '' }}">
+                <label for="id_data_compra">Data da Compra:</label>
+                <input type="date" id="id_data_compra" name="data_compra" value="{{ pedido.data_compra or '' }}">
                 
-                <label>Prazo Original:</label><input type="date" name="prazo" value="{{ pedido.prazo_entrega or '' }}">
-                <label style="color: #d35400;">Nova Data (se atrasou):</label><input type="date" name="reprogramada" value="{{ pedido.data_entrega_reprogramada or '' }}">
+                <label for="id_prazo">Prazo Original:</label>
+                <input type="date" id="id_prazo" name="prazo" value="{{ pedido.prazo_entrega or '' }}">
+                
+                <label for="id_reprogramada" style="color: #d35400;">Nova Data (se atrasou):</label>
+                <input type="date" id="id_reprogramada" name="reprogramada" value="{{ pedido.data_entrega_reprogramada or '' }}">
                 
                 <hr style="margin: 20px 0;">
 
-                <label>Nota Fiscal:</label><input type="text" name="nota" value="{{ pedido.nota_fiscal or '' }}">
-                <label>Série:</label><input type="text" name="serie" value="{{ pedido.serie_nota or '' }}">
+                <label for="id_nota">Nota Fiscal:</label>
+                <input type="text" id="id_nota" name="nota" value="{{ pedido.nota_fiscal or '' }}">
+                
+                <label for="id_serie">Série:</label>
+                <input type="text" id="id_serie" name="serie" value="{{ pedido.serie_nota or '' }}">
                 
                 <hr style="margin: 20px 0;">
                 
-                <label>Comprador Responsável:</label>
-                <select name="resp_comprador">
+                <label for="id_resp_comprador">Comprador Responsável:</label>
+                <select id="id_resp_comprador" name="resp_comprador">
                     <option value="">-- Selecione o Comprador --</option>
                     {% for u in usuarios %}
                         <option value="{{ u.id }}" {% if pedido.id_comprador_responsavel|string == u.id|string %}selected{% endif %}>
@@ -104,8 +116,8 @@
                     {% endfor %}
                 </select>
                 
-                <label>Responsável pelo Chamado:</label>
-                <select name="resp_chamado">
+                <label for="id_resp_chamado">Responsável pelo Chamado:</label>
+                <select id="id_resp_chamado" name="resp_chamado">
                     <option value="">-- Selecione o Solicitante --</option>
                     {% for u in usuarios %}
                         <option value="{{ u.id }}" {% if pedido.id_responsavel_chamado|string == u.id|string %}selected{% endif %}>
@@ -116,13 +128,13 @@
             </div>
             
             <div style="grid-column: 1 / -1;">
-                <label>Comentários / Observações:</label>
-                <textarea name="observacao" rows="3" style="width: 100%; border: 2px solid #ccc; border-radius: 8px; padding: 10px; font-size: 1rem; margin-top: 8px;">{{ pedido.observacao or '' }}</textarea>
+                <label for="id_observacao">Comentários / Observações:</label>
+                <textarea id="id_observacao" name="observacao" rows="3" style="width: 100%; border: 2px solid #ccc; border-radius: 8px; padding: 10px; font-size: 1rem; margin-top: 8px;">{{ pedido.observacao or '' }}</textarea>
             </div>
         </div>
         
-        <div style="margin-top: 30px; background: #e8f5e9; padding: 15px; border-radius: 8px;">
-            <label style="margin-top: 0; color: var(--verde-sucesso);">Anexos Atuais ({{ anexos|length }}):</label>
+        <section style="margin-top: 30px; background: #e8f5e9; padding: 15px; border-radius: 8px;">
+            <h2 style="margin-top: 0; color: var(--verde-sucesso); font-size: 1.1rem; border: none;">Anexos Atuais ({{ anexos|length }})</h2>
 
             {% if anexos %}
                 <div style="margin-bottom: 15px; border: 1px solid #c8e6c9; padding: 10px; background: #f0fff0; border-radius: 6px;">
@@ -131,29 +143,30 @@
                             <a href="{{ url_for('static', filename='uploads/' + anexo.nome_arquivo) }}" target="_blank" style="font-weight: bold; font-size: 0.95rem;">
                                 📄 {{ anexo.nome_original }}
                             </a>
-                            <a href="#" onclick="return mostrarModal('{{ url_for('excluir_anexo', anexo_id=anexo.id) }}', 'anexo')" style="color: red; text-decoration: none; font-size: 0.9rem;">
+                            <button type="button" onclick="return mostrarModal('{{ url_for('excluir_anexo', anexo_id=anexo.id) }}', 'anexo')" style="color: #c0392b; text-decoration: none; background:none; border:none; font-size: 0.9rem; cursor: pointer;" aria-label="Apagar anexo {{ anexo.nome_original }}">
                                 🗑️ Apagar
-                            </a>
+                            </button>
                         </div>
                     {% endfor %}
                 </div>
             {% else %}
-                <p style="color: #666; font-style: italic;">Nenhum arquivo anexado ainda.</p>
+                <div style="color: #666; font-style: italic;">Nenhum arquivo anexado ainda.</div>
             {% endif %}
             
-            <label for="arquivo" style="display: block; margin-bottom: 10px;">Adicionar novo(s) arquivo(s):</label>
+            <h3 style="font-size: 1rem; margin-bottom: 10px; margin-top: 15px;">Adicionar novo(s) arquivo(s):</h3>
+            
             <label for="arquivo" style="border: 2px dashed #999; background: white; padding: 20px; text-align: center; border-radius: 8px; cursor: pointer; display: block; margin-top: 0;">
                 <span class="material-icons" style="font-size: 2rem; color: var(--azul-acao); display: block;">add_circle</span>
                 <span id="texto-arquivo-edit" style="font-size: 1.1rem; color: #555;">Toque aqui para escolher novos arquivos</span>
             </label>
             <input type="file" id="arquivo" name="arquivo" accept=".pdf,.jpg,.jpeg,.png" multiple style="display: none;" onchange="mostrarNomeArquivoEdit()">
-        </div>
+        </section>
 
         <div style="display: flex; gap: 15px; margin-top: 30px;">
-            <a href="{{ url_for('dashboard') }}" style="flex: 1; text-decoration: none;">
-                <button type="button" style="background-color: #95a5a6; margin: 0;">Cancelar</button>
-            </a>
-            <button type="submit" style="flex: 2; background: var(--verde-sucesso); margin: 0;">
+                <button type="button" onclick="window.location.href='{{ url_for('dashboard') }}'" style="flex: 1; background-color: #95a5a6; margin: 0; color: #1a252f; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 1rem;">
+                    Cancelar
+                </button>
+            <button type="submit" style="flex: 2; background: var(--verde-sucesso); margin: 0; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 1rem; color: white;">
                 💾 Salvar Alterações
             </button>
         </div>
@@ -164,10 +177,10 @@
     <div class="linha-item" style="display: grid; grid-template-columns: 4fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 10px; align-items: center;">
         <input type="hidden" name="item_id[]" value=""> 
         
-        <input type="text" name="nome_item[]" placeholder="Nome do Item" required style="font-weight: bold;">
-        <input type="number" name="qtd[]" value="1" required min="1" style="text-align: center;">
+        <input type="text" name="nome_item[]" placeholder="Nome do Item" required style="font-weight: bold;" aria-label="Descrição do Item">
+        <input type="number" name="qtd[]" value="1" required min="1" style="text-align: center;" aria-label="Quantidade">
         
-        <select name="unidade[]" style="padding: 10px;">
+        <select name="unidade[]" style="padding: 10px;" aria-label="Unidade de Medida">
             <option value="UN">UN</option>
             <option value="CX">CX</option>
             <option value="PCT">PCT</option>
@@ -176,7 +189,7 @@
             <option value="L">L</option>
         </select>
 
-        <button type="button" onclick="removerItemNovo(this)" style="background: #fab1a0; color: #c0392b; padding: 10px; margin: 0;">
+        <button type="button" onclick="removerItemNovo(this)" style="background: #fab1a0; color: #c0392b; padding: 10px; margin: 0;" aria-label="Remover item">
             ✖
         </button>
     </div>

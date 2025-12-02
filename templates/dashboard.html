@@ -6,10 +6,10 @@
 <div style="margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
     
     <div style="flex: 1; min-width: 250px;">
-        <h2 style="margin-bottom: 5px; border: none; font-size: 2rem; color: #2c3e50;">
+        <h1 style="margin-bottom: 5px; border: none; font-size: 2rem; color: #2c3e50; margin-top: 0;">
             👋 Olá, {{ session.get('user_name', 'Comprador') }}
-        </h2>
-        <p style="color: #666; margin: 0; font-size: 1.1rem;">
+        </h1>
+        <p style="color: #444; margin: 0; font-size: 1.1rem;">
             Acompanhe abaixo os pedidos e entregas da Nutrane.
         </p>
     </div>
@@ -35,26 +35,26 @@
 </div>
 
 <div class="card" style="background-color: #f8fbff; border-left: 6px solid var(--azul-acao); padding: 25px;">
-    <h3 style="margin-top: 0; font-size: 1.3rem; display: flex; align-items: center; gap: 10px; color: var(--azul-acao);">
+    <h2 style="margin-top: 0; font-size: 1.3rem; display: flex; align-items: center; gap: 10px; color: var(--azul-acao);">
         <span class="material-icons">filter_alt</span> 
         Filtrar Pedidos
-    </h3>
+    </h2>
     
     <form action="{{ url_for('dashboard') }}" method="GET" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; align-items: end;">
         
         <div>
-            <label style="font-size: 1rem;">O que você procura?</label>
-            <input type="text" name="busca" value="{{ busca }}" placeholder="Ex: Computador, 1234..." style="margin-top: 5px;">
+            <label for="busca_id" style="font-size: 1rem;">O que você procura?</label>
+            <input type="text" name="busca" id="busca_id" value="{{ busca }}" placeholder="Ex: Computador, 1234..." style="margin-top: 5px;">
         </div>
 
         <div>
-            <label style="font-size: 1rem;">Nº Solicitação:</label>
-            <input type="text" name="f_solicitacao" value="{{ f_solicitacao }}" placeholder="Ex: 102030" style="margin-top: 5px;">
+            <label for="solicitacao_id" style="font-size: 1rem;">Nº Solicitação:</label>
+            <input type="text" name="f_solicitacao" id="solicitacao_id" value="{{ f_solicitacao }}" placeholder="Ex: 589" style="margin-top: 5px;">
         </div>
 
         <div>
-            <label style="font-size: 1rem;">Comprador:</label>
-            <select name="f_comprador" style="margin-top: 5px;">
+            <label for="comprador_id" style="font-size: 1rem;">Comprador:</label>
+            <select name="f_comprador" id="comprador_id" style="margin-top: 5px;">
                 <option value="">Todos os compradores</option>
                 {% for c in lista_compradores %}
                     <option value="{{ c.id }}" {% if f_comprador|string == c.id|string %}selected{% endif %}>{{ c.nome_completo }}</option>
@@ -63,8 +63,8 @@
         </div>
 
         <div>
-            <label style="font-size: 1rem;">Unidade:</label>
-            <select name="f_empresa" style="margin-top: 5px;">
+            <label for="unidade_id" style="font-size: 1rem;">Unidade:</label>
+            <select name="f_empresa" id="unidade_id" style="margin-top: 5px;">
                 <option value="">Todas as unidades</option>
                 {% for e in lista_empresas %}
                     <option value="{{ e.codi_empresa }}" {% if f_empresa|string == e.codi_empresa|string %}selected{% endif %}>{{ e.nome_empresa }}</option>
@@ -73,8 +73,8 @@
         </div>
 
         <div>
-            <label style="font-size: 1rem;">Situação:</label>
-            <select name="f_status" style="margin-top: 5px;">
+            <label for="status_id" style="font-size: 1rem;">Situação:</label>
+            <select name="f_status" id="status_id" style="margin-top: 5px;">
                 <option value="">Qualquer situação</option>
                 {% for s in lista_status %}
                     <option value="{{ s }}" {% if f_status == s %}selected{% endif %}>{{ s }}</option>
@@ -83,20 +83,21 @@
         </div>
         
         <div>
-            <label style="font-size: 1rem;">Data de Registro (Início):</label>
-            <input type="date" name="f_data_inicio" value="{{ f_data_inicio }}" style="margin-top: 5px;">
+            <label for="data_inicio_id" style="font-size: 1rem;">Data de Registro (Início):</label>
+            <input type="date" name="f_data_inicio" id="data_inicio_id" value="{{ f_data_inicio }}" style="margin-top: 5px;">
         </div>
         
         <div>
-            <label style="font-size: 1rem;">Data de Registro (Fim):</label>
-            <input type="date" name="f_data_fim" value="{{ f_data_fim }}" style="margin-top: 5px;">
+            <label for="data_fim_id" style="font-size: 1rem;">Data de Registro (Fim):</label>
+            <input type="date" name="f_data_fim" id="data_fim_id" value="{{ f_data_fim }}" style="margin-top: 5px;">
         </div>
 
         <div style="display: flex; gap: 10px;">
             <button type="submit" style="margin: 0; background-color: var(--azul-acao);">Filtrar</button>
+            
             {% if busca or f_solicitacao or f_empresa or f_comprador or f_status or f_data_inicio or f_data_fim %}
-                <a href="{{ url_for('dashboard') }}" style="text-decoration: none; flex: 1;">
-                    <button type="button" style="margin: 0; background-color: #95a5a6; width: 100%;">Limpar</button>
+                <a href="{{ url_for('dashboard', limpar=1) }}" style="text-decoration: none; flex: 1;" aria-label="Limpar todos os filtros">
+                    <button type="button" style="margin: 0; background-color: #6c757d; width: 100%;">Limpar</button>
                 </a>
             {% endif %}
         </div>
@@ -116,9 +117,9 @@
     
     {% if not pedidos %}
         <div class="card" style="text-align: center; padding: 50px 20px;">
-            <span class="material-icons" style="font-size: 5rem; color: #ddd; margin-bottom: 15px;">content_paste_off</span>
-            <h3 style="color: #777;">Nenhum pedido encontrado.</h3>
-            <p style="color: #999;">Tente mudar os filtros acima para ver mais resultados.</p>
+            <span class="material-icons" style="font-size: 5rem; color: #bbb; margin-bottom: 15px;">content_paste_off</span>
+            <h2 style="color: #555;">Tudo limpo!</h2> 
+            <p style="color: #666;">Nenhum pedido encontrado. Tente mudar os filtros acima para ver mais resultados.</p>
         </div>
     {% endif %}
 
@@ -126,20 +127,20 @@
         {% for p in pedidos %}
         <div class="card" style="margin: 0; padding: 0; overflow: hidden; border: 1px solid #eee; box-shadow: 0 4px 10px rgba(0,0,0,0.05); transition: transform 0.2s;">
             
-            <div style="background-color: {{ p.cor_s }}; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; color: white;">
+            <div style="background-color: {{ p.cor_s }}; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; color: #000;">
                 <span style="font-weight: bold; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">
                     {{ p.txt_s }}
                 </span>
-                <span class="material-icons" style="font-size: 1.2rem; opacity: 0.8;">
+                <span class="material-icons" style="font-size: 1.2rem;">
                     {% if 'ENTREGUE' in p.txt_s %}check_circle{% elif 'ATRASADO' in p.txt_s %}warning{% else %}schedule{% endif %}
                 </span>
             </div>
 
             <div style="padding: 20px;">
-                <h3 style="margin-top: 0; margin-bottom: 5px; font-size: 1.4rem; color: #2c3e50;">
+                <h2 style="margin-top: 0; margin-bottom: 5px; font-size: 1.4rem; color: #2c3e50;">
                     {{ p.item_comprado }}
-                </h3>
-                <p style="margin: 0 0 15px 0; color: #666; font-size: 1rem; display: flex; align-items: center; gap: 5px;">
+                </h2>
+                <p style="margin: 0 0 15px 0; color: #444; font-size: 1rem; display: flex; align-items: center; gap: 5px;">
                     <span class="material-icons" style="font-size: 1rem;">storefront</span>
                     {{ p.fornecedor }}
                 </p>
@@ -147,54 +148,50 @@
                 <div style="background-color: #f9f9f9; border-radius: 8px; padding: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; font-size: 0.95rem;">
                     
                     <div>
-                        <span style="display: block; font-size: 0.8rem; color: #888; font-weight: bold;">SOLICITAÇÃO</span>
+                        <span style="display: block; font-size: 0.8rem; color: #555; font-weight: bold;">SOLICITAÇÃO</span>
                         <strong style="font-size: 1.1rem;">{{ p.numero_solicitacao }}</strong>
                     </div>
                     
                     <div>
-                        <span style="display: block; font-size: 0.8rem; color: #888; font-weight: bold;">UNIDADE</span>
+                        <span style="display: block; font-size: 0.8rem; color: #555; font-weight: bold;">UNIDADE</span>
                         <span>{{ p.nome_empresa }}</span>
                     </div>
 
                     {% set data_exibicao = p.data_entrega_reprogramada or p.prazo_entrega or 'Sem previsão' %}
                     <div style="grid-column: span 2;">
-                        <span style="display: block; font-size: 0.8rem; color: #888; font-weight: bold;">PRAZO DE ENTREGA</span>
-                        
-                        <div style="color: {{ p.cor_p }}; font-weight: bold; display: flex; align-items: center; gap: 5px;">
-                            
-                            {% if p.txt_p == 'ATRASADO' %}
+                        <span style="display: block; font-size: 0.8rem; color: #555; font-weight: bold;">PRAZO DE ENTREGA</span>
+                        {% if p.txt_p == 'ATRASADO' %}
+                            <div style="color: #c0392b; font-weight: bold; display: flex; align-items: center; gap: 5px;">
                                 <span class="material-icons" style="font-size: 1rem;">error</span>
-                            {% elif p.txt_p == 'ATENÇÃO' %}
-                                <span class="material-icons" style="font-size: 1rem;">warning</span>
-                            {% elif p.txt_p == 'NO PRAZO' %}
-                                <span class="material-icons" style="font-size: 1rem;">check_circle</span>
-                            {% endif %}
-                            
-                            {{ data_exibicao }} {% if p.txt_p != '-' %}({{ p.txt_p }}){% endif %}
-                        </div>
+                                {{ data_exibicao }} (Atrasado)
+                            </div>
+                        {% else %}
+                            <div style="color: #146c43; font-weight: bold;">
+                                {{ data_exibicao }}
+                            </div>
+                        {% endif %}
                     </div>
                 </div>
 
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <a href="{{ url_for('ver_pedido', id=p.id) }}" style="flex: 1; text-decoration: none;">
-                        <button style="margin: 0; width: 100%; font-size: 1rem; padding: 10px; background-color: #3498db; box-shadow: none;">
+                    <a href="{{ url_for('ver_pedido', id=p.id) }}" style="flex: 1; text-decoration: none;" aria-label="Ver Detalhes do Pedido {{ p.numero_solicitacao }}">
+                        <button style="margin: 0; width: 100%; font-size: 1rem; padding: 10px; background-color: #1565c0; color: white; box-shadow: none;">
                             👁️ Ver
                         </button>
                     </a>
 
-                    <a href="{{ url_for('editar_pedido', id=p.id) }}" style="flex: 1; text-decoration: none;">
-                        <button style="margin: 0; width: 100%; font-size: 1rem; padding: 10px; background-color: #f39c12; box-shadow: none;">
+                    <a href="{{ url_for('editar_pedido', id=p.id) }}" style="flex: 1; text-decoration: none;" aria-label="Editar Pedido Número {{ p.numero_solicitacao }}">
+                        <button style="margin: 0; width: 100%; font-size: 1rem; padding: 10px; background-color: #f39c12; color: #2c3e50; box-shadow: none;">
                             ✏️ Editar
                         </button>
                     </a>
                     
-                    <a href="#" onclick="return mostrarModal('{{ url_for('excluir_pedido', id=p.id) }}', 'pedido')" style="text-decoration: none;">
-                        <button style="margin: 0; background-color: #c0392b; width: auto; padding: 10px 15px; box-shadow: none;" title="Apagar Pedido">
+                    <a href="#" onclick="return mostrarModal('{{ url_for('excluir_pedido', id=p.id) }}', 'pedido')" style="text-decoration: none;" aria-label="Apagar Pedido Número {{ p.numero_solicitacao }}">
+                        <button style="margin: 0; background-color: #a93226; width: auto; padding: 10px 15px; box-shadow: none;" title="Apagar Pedido">
                             🗑️
                         </button>
                     </a>
                 </div>
-
             </div>
         </div>
         {% endfor %}
@@ -239,28 +236,28 @@
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 25px;">
         
         <div class="card" style="padding: 20px;">
-            <h3 style="text-align: center; color: #555; margin-bottom: 20px;">Situação dos Pedidos</h3>
+            <h2 style="text-align: center; color: #555; margin-bottom: 20px;">Situação dos Pedidos</h2>
             <div style="height: 300px;">
                 <canvas id="chartStatus"></canvas>
             </div>
         </div>
 
         <div class="card" style="padding: 20px;">
-            <h3 style="text-align: center; color: #555; margin-bottom: 20px;">Top Fornecedores (Em Aberto)</h3>
+            <h2 style="text-align: center; color: #555; margin-bottom: 20px;">Top Fornecedores (Em Aberto)</h2>
             <div style="height: 300px;">
                 <canvas id="chartForn"></canvas>
             </div>
         </div>
 
         <div class="card" style="grid-column: 1 / -1; padding: 20px;">
-            <h3 style="text-align: center; color: #555; margin-bottom: 20px;">Volume de Trabalho por Comprador</h3>
+            <h2 style="text-align: center; color: #555; margin-bottom: 20px;">Volume de Trabalho por Comprador</h2>
             <div style="height: 250px;">
                 <canvas id="chartComp"></canvas>
             </div>
         </div>
 
         <div class="card" style="grid-column: 1 / -1; padding: 20px;">
-            <h3 style="text-align: center; color: #555; margin-bottom: 20px;">📅 Previsão de Entregas (Semanal)</h3>
+            <h2 style="text-align: center; color: #555; margin-bottom: 20px;">📅 Previsão de Entregas (Semanal)</h2>
             <div style="height: 300px;">
                 <canvas id="chartTimeline"></canvas>
             </div>
@@ -293,7 +290,7 @@
         }
     }
 
-    // 2. Geração dos Gráficos
+    // 2. Geração dos Gráficos (MANTIDO)
     document.addEventListener("DOMContentLoaded", function() {
         try {
             if (typeof Chart === 'undefined') return;

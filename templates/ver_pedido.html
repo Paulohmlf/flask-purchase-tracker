@@ -84,8 +84,9 @@
 
     <div class="screen-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 20px;">
         <div>
-            <h2 style="margin: 0; color: #2c3e50;">📄 Pedido #{{ pedido.id }}</h2>
-            <p style="margin: 5px 0; color: #7f8c8d;">Registrado em: {{ pedido.data_registro }}</p>
+            <h1 style="margin: 0; color: #2c3e50; font-size: 1.8rem;">📄 Pedido #{{ pedido.id }}</h1>
+            
+            <p style="margin: 5px 0; color: #444;">Registrado em: {{ pedido.data_registro }}</p>
         </div>
         
         <div style="text-align: right;" class="no-print">
@@ -98,7 +99,7 @@
                     🖨️ Imprimir
                 </button>
                 <a href="{{ url_for('editar_pedido', id=pedido.id) }}">
-                    <button class="btn-acao" style="background: #f39c12; font-size: 0.9rem; padding: 8px 15px; border: none; color: white; cursor: pointer;">
+                    <button class="btn-acao" style="background: #f39c12; font-size: 0.9rem; padding: 8px 15px; border: none; color: #2c3e50; cursor: pointer;">
                         ✏️ Editar
                     </button>
                 </a>
@@ -108,24 +109,24 @@
 
     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 5px;">
         <div>
-            <label style="color: #666; font-size: 0.8rem; text-transform: uppercase; font-weight: bold;">Unidade Solicitante</label>
+            <p style="margin: 0; color: #666; font-size: 0.8rem; text-transform: uppercase; font-weight: bold;">Unidade Solicitante</p>
             <div style="font-size: 1.1rem; font-weight: bold;">{{ pedido.nome_empresa }}</div>
         </div>
         <div>
-            <label style="color: #666; font-size: 0.8rem; text-transform: uppercase; font-weight: bold;">Nº Solicitação / Pedido</label>
+            <p style="margin: 0; color: #666; font-size: 0.8rem; text-transform: uppercase; font-weight: bold;">Nº Solicitação / Pedido</p>
             <div style="font-size: 1.1rem;">Solic: <strong>{{ pedido.numero_solicitacao }}</strong> / Ped: <strong>{{ pedido.numero_pedido or '-' }}</strong></div>
         </div>
         <div>
-            <label style="color: #666; font-size: 0.8rem; text-transform: uppercase; font-weight: bold;">Fornecedor</label>
+            <p style="margin: 0; color: #666; font-size: 0.8rem; text-transform: uppercase; font-weight: bold;">Fornecedor</p>
             <div style="font-size: 1.1rem;">{{ pedido.fornecedor }}</div>
         </div>
         <div>
-            <label style="color: #666; font-size: 0.8rem; text-transform: uppercase; font-weight: bold;">Categoria</label>
+            <p style="margin: 0; color: #666; font-size: 0.8rem; text-transform: uppercase; font-weight: bold;">Categoria</p>
             <div style="font-size: 1.1rem;">{{ pedido.categoria or '-' }}</div>
         </div>
     </div>
 
-    <h3 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 5px; margin-bottom: 10px; font-size: 1.2rem;">📦 Itens do Pedido</h3>
+    <h2 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 5px; margin-bottom: 10px; font-size: 1.2rem; margin-top: 20px;">📦 Itens do Pedido</h2>
     
     <table>
         <thead>
@@ -149,7 +150,7 @@
     <div style="display: flex; justify-content: space-between; gap: 20px; margin-top: 20px;">
         
         <div style="flex: 1;">
-            <h4 style="margin-top: 0; color: #555; border-bottom: 1px solid #ccc;">Dados Fiscais & Prazos</h4>
+            <h3 style="margin-top: 0; color: #555; border-bottom: 1px solid #ccc; font-size: 1.1rem;">Dados Fiscais & Prazos</h3>
             <p style="margin: 5px 0; font-size: 0.9rem;"><strong>Orçamento:</strong> {{ pedido.numero_orcamento or '-' }}</p>
             <p style="margin: 5px 0; font-size: 0.9rem;"><strong>Nota Fiscal:</strong> {{ pedido.nota_fiscal or '-' }} (Série: {{ pedido.serie_nota or '-' }})</p>
             <p style="margin: 5px 0; font-size: 0.9rem;"><strong>Data Compra:</strong> {% if pedido.data_compra %}{{ pedido.data_compra[8:10] }}/{{ pedido.data_compra[5:7] }}/{{ pedido.data_compra[0:4] }}{% else %}-{% endif %}</p>
@@ -157,7 +158,7 @@
         </div>
 
         <div style="flex: 1;">
-            <h4 style="margin-top: 0; color: #555; border-bottom: 1px solid #ccc;">Responsáveis</h4>
+            <h3 style="margin-top: 0; color: #555; border-bottom: 1px solid #ccc; font-size: 1.1rem;">Responsáveis</h3>
             
             <p style="margin: 5px 0; font-size: 0.9rem;">
                 Solicitante (Origem):<br>
@@ -195,7 +196,7 @@
     </div>
 
     <div class="no-print" style="margin-top: 40px; text-align: center;">
-        <a href="{{ url_for('dashboard') }}" style="text-decoration: none; color: #7f8c8d; font-weight: bold;">
+        <a href="{{ url_for('dashboard') }}" style="text-decoration: none; color: #2c3e50; font-weight: bold;">
             ⬅ Voltar para o Dashboard
         </a>
     </div>

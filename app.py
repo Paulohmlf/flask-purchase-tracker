@@ -13,7 +13,6 @@ import re
 app = Flask(__name__)
 app.secret_key = 'chave_super_secreta_nutrane'
 
-# Configuração de Uploads
 UPLOAD_FOLDER = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -27,7 +26,6 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-# --- FUNÇÃO HELPER PARA SALVAR MÚLTIPLOS ARQUIVOS ---
 def salvar_anexos_multiplos(conn, pedido_id, files):
     for arq in files:
         if arq and allowed_file(arq.filename) and arq.filename != '':
@@ -41,7 +39,6 @@ def salvar_anexos_multiplos(conn, pedido_id, files):
             ''', (pedido_id, nome_seguro, nome_original))
     conn.commit()
 
-# --- LOGIN E REGISTRO ---
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -83,14 +80,25 @@ def registro():
             flash('Email já existe.')
     return render_template('registro.html')
 
-# --- DASHBOARD ---
 @app.route('/dashboard')
 def dashboard():
     if 'user_id' not in session: return redirect(url_for('login'))
     
     conn = get_db_connection()
     
-    # Filtros
+    if request.args.get('limpar'):
+        session.pop('filtros_memoria', None)
+        return redirect(url_for('dashboard'))
+
+    if request.args:
+        filtros_atuais = request.args.to_dict()
+        session['filtros_memoria'] = filtros_atuais
+        
+
+    elif 'filtros_memoria' in session:
+        return redirect(url_for('dashboard', **session['filtros_memoria']))
+
+
     busca = request.args.get('busca', '')
     f_solicitacao = request.args.get('f_solicitacao', '')
     f_empresa = request.args.get('f_empresa', '')
@@ -154,7 +162,7 @@ def dashboard():
     '''
     rows = conn.execute(sql_tabela, params + [itens_por_pagina, offset]).fetchall()
 
-    # Gráficos
+
     sql_status = f"SELECT c.status_compra, COUNT(*) as qtd {sql_joins} {where_clause} GROUP BY c.status_compra"
     dados_status = conn.execute(sql_status, params).fetchall()
     labels_status = [r['status_compra'] for r in dados_status]
@@ -232,7 +240,7 @@ def dashboard():
                            graf_comp={'labels': labels_comp, 'values': values_comp},
                            graf_timeline={'labels': labels_timeline, 'values': values_timeline})
 
-# --- NOVA COMPRA ---
+
 @app.route('/nova_compra', methods=['GET', 'POST'])
 def nova_compra():
     if 'user_id' not in session: return redirect(url_for('login'))
@@ -434,7 +442,6 @@ def ver_pedido(id):
 
     return render_template('ver_pedido.html', pedido=pedido, itens=itens, anexos=anexos)
 
-# --- IMPORTAÇÃO DE PDF (COM CORREÇÃO DE PC -> PCT) ---
 @app.route('/importar_solicitacao', methods=['POST'])
 def importar_solicitacao():
     if 'arquivo_pdf' not in request.files:
@@ -457,7 +464,7 @@ def importar_solicitacao():
             page = pdf.pages[0]
             texto_bruto = page.extract_text() or ""
             
-            # --- 1. CABEÇALHO ---
+
             match_solic = re.search(r'Solicitação de Compra:\s*(\d+)', texto_bruto)
             if match_solic: dados_pdf['solicitacao'] = match_solic.group(1)
             
@@ -469,26 +476,22 @@ def importar_solicitacao():
             match_emp = re.search(r'Empresa:\s*(\d+)', texto_bruto)
             if match_emp: dados_pdf['empresa'] = match_emp.group(1)
 
-            # --- CORREÇÃO: REQUERENTE ---
-            # Procura a linha com "Requerente" e depois busca nas próximas 3 linhas
-            # Usa layout=True para ver os espaços físicos e separar o nome da Obs
+
             texto_layout = page.extract_text(layout=True) or ""
             if "Requerente" in texto_layout:
                 linhas_layout = texto_layout.split('\n')
                 for i, linha in enumerate(linhas_layout):
                     if "Requerente" in linha:
-                        # Procura nas próximas linhas por texto
                         for offset in range(1, 4):
                             if i + offset < len(linhas_layout):
                                 linha_alvo = linhas_layout[i+offset].strip()
                                 if linha_alvo: 
-                                    # Corta onde tiver 2+ espaços
                                     partes = re.split(r'\s{2,}', linha_alvo)
                                     dados_pdf['solicitante_real'] = partes[0]
                                     break
                         break
 
-            # --- 2. ITENS (TEXTO PURO COM SMART SWITCH) ---
+
             linhas = texto_bruto.split('\n')
             for i, linha in enumerate(linhas):
                 match_prod = re.search(r'^(\d{2}\.\d{2}\.\d{4})\s+(.+)', linha)
@@ -517,7 +520,7 @@ def importar_solicitacao():
                         elif token_upper in unidades_conhecidas or (token_upper == 'UN' and 'UN' in token_upper):
                             encontrou_unidade = True
                             
-                            # --- CORREÇÃO DE UNIDADE (PC -> PCT) ---
+
                             if "UN" in token_upper: unid = "UN"
                             elif token_upper == "PC": unid = "PCT"
                             else: unid = token_upper
@@ -531,7 +534,6 @@ def importar_solicitacao():
                             descricao_parts.append(token)
                     
                     desc_produto = " ".join(descricao_parts).strip()
-                    
                     nome_item_formatado = f"{codigo} - {desc_produto}"
                     
                     if obs_texto:

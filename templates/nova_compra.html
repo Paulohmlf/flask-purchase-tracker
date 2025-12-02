@@ -4,31 +4,31 @@
 <div class="card" style="max-width: 900px; margin: 0 auto; border-top: 6px solid var(--azul-acao);">
     
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h2 style="margin: 0; border: none;">🛒 Lançar Nova Compra</h2>
-        <a href="{{ url_for('dashboard') }}" style="color: #e74c3c; font-weight: bold; font-size: 1.1rem; text-decoration: none;">
+        <h1 style="margin: 0; border: none; font-size: 1.8rem; color: #2c3e50;">🛒 Lançar Nova Compra</h1>
+        <a href="{{ url_for('dashboard') }}" style="color: #c0392b; font-weight: bold; font-size: 1.1rem; text-decoration: none;">
             ✖ Cancelar
         </a>
     </div>
 
-    <div style="background: #e3f2fd; border: 2px dashed #2196f3; padding: 15px; border-radius: 8px; margin-bottom: 30px; text-align: center;">
+    <div style="background: #e3f2fd; border: 2px dashed #1565c0; padding: 15px; border-radius: 8px; margin-bottom: 30px; text-align: center;">
         <form action="{{ url_for('importar_solicitacao') }}" method="POST" enctype="multipart/form-data" id="form-importar" style="display: flex; align-items: center; justify-content: center; gap: 15px;">
-            <label for="pdf_import" style="cursor: pointer; color: #1565c0; font-weight: bold; display: flex; align-items: center; gap: 5px;">
+            <label for="pdf_import" style="cursor: pointer; color: #0d47a1; font-weight: bold; display: flex; align-items: center; gap: 5px;">
                 <span class="material-icons">picture_as_pdf</span> 
                 Importar Solicitação (PDF)
             </label>
             <input type="file" name="arquivo_pdf" id="pdf_import" accept=".pdf" required style="font-size: 0.9rem;">
             
-            <button type="submit" form="form-importar" style="background: #2196f3; color: white; padding: 8px 15px; margin: 0; font-size: 0.9rem;">
+            <button type="submit" form="form-importar" style="background: #1565c0; color: white; padding: 8px 15px; margin: 0; font-size: 0.9rem;">
                 Carregar Dados ⚡
             </button>
         </form>
-        <p style="margin: 5px 0 0 0; font-size: 0.8rem; color: #666;">Carregue o PDF da Yale/Nutrane para preencher automaticamente.</p>
+        <p style="margin: 5px 0 0 0; font-size: 0.8rem; color: #444;">Carregue o PDF da Yale/Nutrane para preencher automaticamente.</p>
     </div>
 
     <form method="POST" enctype="multipart/form-data" id="form-compra" action="{{ url_for('nova_compra') }}">
         
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #e9ecef;">
-            <h3 style="color: var(--azul-acao); margin-top: 0;">1. Lista de Produtos</h3>
+            <h2 style="color: var(--azul-acao); margin-top: 0; font-size: 1.4rem;">1. Lista de Produtos</h2>
             
             <div style="display: grid; grid-template-columns: 4fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 5px; font-weight: bold; color: #555; font-size: 0.9rem;">
                 <div>Descrição do Item *</div>
@@ -41,10 +41,10 @@
                 {% if itens_preenchidos %}
                     {% for item in itens_preenchidos %}
                     <div class="linha-item" style="display: grid; grid-template-columns: 4fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 10px; align-items: center;">
-                        <input type="text" name="nome_item[]" value="{{ item.nome_item }}" required style="font-weight: bold;">
-                        <input type="number" name="qtd[]" value="{{ item.quantidade }}" required min="1" style="text-align: center;">
+                        <input type="text" name="nome_item[]" value="{{ item.nome_item }}" required style="font-weight: bold;" aria-label="Descrição do Item">
+                        <input type="number" name="qtd[]" value="{{ item.quantidade }}" required min="1" style="text-align: center;" aria-label="Quantidade">
                         
-                        <select name="unidade[]" style="padding: 10px;">
+                        <select name="unidade[]" style="padding: 10px;" aria-label="Unidade de Medida">
                             <option value="UN" {% if item.unidade_medida == 'UN' %}selected{% endif %}>UN</option>
                             <option value="CX" {% if item.unidade_medida == 'CX' %}selected{% endif %}>CX</option>
                             <option value="PCT" {% if item.unidade_medida == 'PCT' %}selected{% endif %}>PCT</option>
@@ -53,14 +53,14 @@
                             <option value="L" {% if item.unidade_medida == 'L' %}selected{% endif %}>L</option>
                         </select>
                         
-                        <button type="button" onclick="removerItem(this)" style="background: #fab1a0; color: #c0392b; padding: 10px; margin: 0;">✖</button>
+                        <button type="button" onclick="removerItem(this)" style="background: #fab1a0; color: #c0392b; padding: 10px; margin: 0;" aria-label="Remover item da lista">✖</button>
                     </div>
                     {% endfor %}
                 {% else %}
                     <div class="linha-item" style="display: grid; grid-template-columns: 4fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 10px; align-items: center;">
-                        <input type="text" name="nome_item[]" required placeholder="Ex: Caneta Azul" style="font-weight: bold;">
-                        <input type="number" name="qtd[]" required min="1" value="1" style="text-align: center;">
-                        <select name="unidade[]" style="padding: 10px;">
+                        <input type="text" name="nome_item[]" required placeholder="Ex: Caneta Azul" style="font-weight: bold;" aria-label="Descrição do Item">
+                        <input type="number" name="qtd[]" required min="1" value="1" style="text-align: center;" aria-label="Quantidade">
+                        <select name="unidade[]" style="padding: 10px;" aria-label="Unidade de Medida">
                             <option value="UN">UN</option>
                             <option value="CX">CX</option>
                             <option value="PCT">PCT</option>
@@ -68,7 +68,7 @@
                             <option value="M">M</option>
                             <option value="L">L</option>
                         </select>
-                        <button type="button" onclick="removerItem(this)" style="background: #fab1a0; color: #c0392b; padding: 10px; margin: 0; display: none;">✖</button>
+                        <button type="button" onclick="removerItem(this)" style="background: #fab1a0; color: #c0392b; padding: 10px; margin: 0; display: none;" aria-label="Remover item da lista">✖</button>
                     </div>
                 {% endif %}
             </div>
@@ -81,17 +81,17 @@
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                 <div>
-                    <label>Fornecedor (Quem vende?):</label>
-                    <input type="text" name="fornecedor" required placeholder="Ex: Kalunga" value="{{ dados_form.get('fornecedor', '') }}">
+                    <label for="id_fornecedor">Fornecedor (Quem vende?):</label>
+                    <input type="text" id="id_fornecedor" name="fornecedor" required placeholder="Ex: Kalunga" value="{{ dados_form.get('fornecedor', '') }}">
                 </div>
                 <div>
-                    <label>Categoria Principal:</label>
-                    <input type="text" name="categoria" placeholder="Ex: Peças" value="{{ dados_form.get('categoria', '') }}">
+                    <label for="id_categoria">Categoria Principal:</label>
+                    <input type="text" id="id_categoria" name="categoria" placeholder="Ex: Peças" value="{{ dados_form.get('categoria', '') }}">
                 </div>
             </div>
 
-            <label style="margin-top: 15px; display: block;">Para qual Unidade?</label>
-            <select name="empresa" required style="height: 50px; font-size: 1rem;">
+            <label for="id_empresa" style="margin-top: 15px; display: block;">Para qual Unidade?</label>
+            <select id="id_empresa" name="empresa" required style="height: 50px; font-size: 1rem;">
                 <option value="" disabled {% if not dados_form.get('empresa') %}selected{% endif %}>⬇ Selecione a Loja</option>
                 {% for emp in empresas %}
                     <option value="{{ emp.codi_empresa }}" 
@@ -103,40 +103,41 @@
         </div>
 
         <div style="background-color: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #cfe2ff;">
-            <h3 style="color: #004085; margin-top: 0;">2. Números e Prazos</h3>
+            <h2 style="color: #004085; margin-top: 0; font-size: 1.4rem;">2. Números e Prazos</h2>
             
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
                 <div>
-                    <label>Nº Solicitação :</label>
-                    <input type="text" name="solicitacao" required placeholder="12345" value="{{ dados_form.get('solicitacao', '') }}">
+                    <label for="id_solicitacao">Nº Solicitação :</label>
+                    <input type="text" id="id_solicitacao" name="solicitacao" required placeholder="12345" value="{{ dados_form.get('solicitacao', '') }}">
                 </div>
                 <div>
-                    <label>Nº Orçamento :</label>
-                    <input type="text" name="orcamento" value="{{ dados_form.get('orcamento', '') }}">
+                    <label for="id_orcamento">Nº Orçamento :</label>
+                    <input type="text" id="id_orcamento" name="orcamento" value="{{ dados_form.get('orcamento', '') }}">
                 </div>
                 <div>
-                    <label>Nº Pedido :</label>
-                    <input type="text" name="pedido" placeholder="Ex: PED-999" value="{{ dados_form.get('pedido', '') }}">
+                    <label for="id_pedido">Nº Pedido :</label>
+                    <input type="text" id="id_pedido" name="pedido" placeholder="Ex: PED-999" value="{{ dados_form.get('pedido', '') }}">
                 </div>
                 
                 <div>
-                    <label>Data da Compra:</label>
-                    <input type="date" name="data_compra" value="{{ dados_form.get('data_compra', '') }}">
+                    <label for="id_data_compra">Data da Compra:</label>
+                    <input type="date" id="id_data_compra" name="data_compra" value="{{ dados_form.get('data_compra', '') }}">
                 </div>
                 <div>
-                    <label>Prazo de Entrega:</label>
-                    <input type="date" name="prazo" value="{{ dados_form.get('prazo', '') }}">
+                    <label for="id_prazo">Prazo de Entrega:</label>
+                    <input type="date" id="id_prazo" name="prazo" value="{{ dados_form.get('prazo', '') }}">
                 </div>
             </div>
             
-            <label>Observações:</label>
-            <textarea name="observacao" rows="3" style="width: 100%; border: 2px solid #ccc; border-radius: 8px; padding: 10px; margin-top: 8px;">{{ dados_form.get('observacao', '') }}</textarea>
+            <label for="id_observacao">Observações:</label>
+            <textarea id="id_observacao" name="observacao" rows="3" style="width: 100%; border: 2px solid #ccc; border-radius: 8px; padding: 10px; margin-top: 8px;">{{ dados_form.get('observacao', '') }}</textarea>
         </div>
 
         <div style="background-color: #fff8e1; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #ffeeba;">
-            <h3 style="color: #856404; margin-top: 0;">3. Arquivo e Responsáveis</h3>
+            <h2 style="color: #856404; margin-top: 0; font-size: 1.4rem;">3. Arquivo e Responsáveis</h2>
 
-            <label style="display: block; margin-bottom: 10px;">Anexos (PDF ou Foto)</label>
+            <h3 style="display: block; margin-bottom: 10px; font-weight: bold; color: #333; margin-top: 0; font-size: 1.1rem;">Anexos (PDF ou Foto)</h3>
+            
             <label for="arquivo" style="border: 2px dashed #999; background: white; padding: 20px; text-align: center; border-radius: 8px; cursor: pointer; display: block; margin-top: 0;">
                 <span class="material-icons" style="font-size: 2rem; color: var(--azul-acao); display: block;">cloud_upload</span>
                 <span id="texto-arquivo" style="font-size: 1.1rem; color: #555;">Toque aqui para escolher arquivos</span>
@@ -144,16 +145,16 @@
             <input type="file" id="arquivo" name="arquivo" accept=".pdf,.jpg,.jpeg,.png" multiple style="display: none;" onchange="mostrarNomeArquivo()">
             
             <div style="margin-top: 20px;">
-                <label>Solicitante Real (Quem pediu lá na ponta?):</label>
-                <input type="text" name="solicitante_real" placeholder="Ex: Zezinho da Bahia" 
+                <label for="id_solicitante_real">Solicitante Real (Quem pediu lá na ponta?):</label>
+                <input type="text" id="id_solicitante_real" name="solicitante_real" placeholder="Ex: Zezinho da Bahia" 
                        value="{{ dados_form.get('solicitante_real', '') }}" 
                        style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px;">
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
                 <div>
-                    <label>Responsável pela Compra (Sistema):</label>
-                    <select name="resp_comprador">
+                    <label for="id_resp_comprador">Responsável pela Compra (Sistema):</label>
+                    <select id="id_resp_comprador" name="resp_comprador">
                         <option value="">-- Selecione --</option>
                         {% for u in usuarios %}
                             <option value="{{ u.id }}" {% if dados_form.get('resp_comprador')|string == u.id|string %}selected{% endif %}>{{ u.nome_completo }}</option>
@@ -162,8 +163,8 @@
                 </div>
                 
                 <div>
-                    <label>Responsável pela Solicitação (Sistema):</label>
-                    <select name="resp_chamado">
+                    <label for="id_resp_chamado">Responsável pela Solicitação (Sistema):</label>
+                    <select id="id_resp_chamado" name="resp_chamado">
                         <option value="">-- Selecione --</option>
                         {% for u in usuarios %}
                             <option value="{{ u.id }}" {% if dados_form.get('resp_chamado')|string == u.id|string %}selected{% endif %}>{{ u.nome_completo }}</option>
@@ -173,8 +174,8 @@
             </div>
 
             <div style="margin-top: 20px;">
-                <label>Situação Inicial:</label>
-                <select name="status" style="font-weight: bold; color: #333;">
+                <label for="id_status">Situação Inicial:</label>
+                <select id="id_status" name="status" style="font-weight: bold; color: #333;">
                     <option value="Aguardando Aprovação">🟡 Aguardando Aprovação</option>
                     <option value="Orçamento">🟣 Orçamento</option>
                     <option value="Confirmado">🟢 Confirmado</option>
@@ -190,9 +191,9 @@
 
 <template id="template-novo-item">
     <div class="linha-item" style="display: grid; grid-template-columns: 4fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 10px; align-items: center;">
-        <input type="text" name="nome_item[]" placeholder="Nome do Item" required style="font-weight: bold;">
-        <input type="number" name="qtd[]" value="1" required min="1" style="text-align: center;">
-        <select name="unidade[]" style="padding: 10px;">
+        <input type="text" name="nome_item[]" placeholder="Nome do Item" required style="font-weight: bold;" aria-label="Descrição do Item">
+        <input type="number" name="qtd[]" value="1" required min="1" style="text-align: center;" aria-label="Quantidade">
+        <select name="unidade[]" style="padding: 10px;" aria-label="Unidade de Medida">
             <option value="UN">UN</option>
             <option value="CX">CX</option>
             <option value="PCT">PCT</option>
@@ -200,7 +201,7 @@
             <option value="M">M</option>
             <option value="L">L</option>
         </select>
-        <button type="button" onclick="removerItemNovo(this)" style="background: #fab1a0; color: #c0392b; padding: 10px; margin: 0;">✖</button>
+        <button type="button" onclick="removerItemNovo(this)" style="background: #fab1a0; color: #c0392b; padding: 10px; margin: 0;" aria-label="Remover item da lista">✖</button>
     </div>
 </template>
 
@@ -222,6 +223,36 @@
             texto.style.fontWeight = "bold";
         }
     }
+
+    // --- CÓDIGO NOVO ADICIONADO ABAIXO ---
+    // Impede o envio com Enter e muda o foco para o próximo campo
+    document.addEventListener("DOMContentLoaded", function() {
+        const form = document.getElementById("form-compra");
+
+        form.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") {
+                const target = e.target;
+
+                // Se for TEXTAREA, permite o Enter normal (para pular linha)
+                if (target.tagName === "TEXTAREA") return;
+                
+                // Se for Botão ou Submit, deixa funcionar normalmente
+                if (target.type === "submit" || target.tagName === "BUTTON") return;
+
+                e.preventDefault(); // Impede o envio do formulário
+
+                // Pega todos os inputs visíveis e habilitados
+                const inputs = Array.from(form.querySelectorAll("input:not([type=hidden]):not([disabled]), select:not([disabled])"));
+                
+                const index = inputs.indexOf(target);
+
+                // Se encontrou o campo atual e existe um próximo, foca nele
+                if (index > -1 && index < inputs.length - 1) {
+                    inputs[index + 1].focus();
+                }
+            }
+        });
+    });
 </script>
 
 <style>
