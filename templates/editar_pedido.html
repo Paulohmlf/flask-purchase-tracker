@@ -14,7 +14,7 @@
 
         <section style="background-color: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #ffeeba;">
             <label for="id_status" style="margin-top: 0; color: #856404;">Qual a situação atual?</label>
-            <select id="id_status" name="status" style="font-weight: bold; font-size: 1.2rem; border-color: #f39c12;">
+            <select id="id_status" name="status" style="font-weight: bold; font-size: 1.2rem; border-color: #f39c12;" onchange="verificarStatusEntrega()">
                 <option value="Aguardando Aprovação" {% if pedido.status_compra == 'Aguardando Aprovação' %}selected{% endif %}>🟡 Aguardando Aprovação</option>
                 <option value="Orçamento" {% if pedido.status_compra == 'Orçamento' %}selected{% endif %}>🟣 Orçamento</option>
                 <option value="Confirmado" {% if pedido.status_compra == 'Confirmado' %}selected{% endif %}>🔵 Confirmado</option>
@@ -22,21 +22,47 @@
                 <option value="Entregue Parcialmente" {% if pedido.status_compra == 'Entregue Parcialmente' %}selected{% endif %}>📦 Entregue Parcialmente</option>
                 <option value="Entregue Totalmente" {% if pedido.status_compra == 'Entregue Totalmente' %}selected{% endif %}>✅ Entregue Totalmente</option>
             </select>
+
+            <div id="bloco-entrega" style="display: none; margin-top: 20px; border-top: 2px dashed #d35400; padding-top: 20px;">
+                <h3 style="margin-top: 0; color: #d35400;">📋 Conferência de Recebimento</h3>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <label>Data Real do Recebimento:</label>
+                        <input type="date" name="data_entrega_real" value="{{ pedido.data_entrega_real or '' }}" id="id_data_real">
+                    </div>
+                    
+                    <div>
+                        <label>A entrega foi Perfeita? (OTIF)</label>
+                        <select name="entrega_conforme" id="id_conforme" onchange="toggleDetalhesErro()">
+                            <option value="" {% if pedido.entrega_conforme is none %}selected{% endif %}>-- Selecione --</option>
+                            <option value="1" {% if pedido.entrega_conforme == 1 %}selected{% endif %}>✅ Sim, tudo 100%</option>
+                            <option value="0" {% if pedido.entrega_conforme == 0 %}selected{% endif %}>❌ Não (Teve problema)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="div-erro-entrega" style="display: none; margin-top: 15px;">
+                    <label for="id_detalhes_entrega" style="color: #c0392b;">O que deu errado? (Atraso, Avaria, Falta...)</label>
+                    <textarea name="detalhes_entrega" id="id_detalhes_entrega" rows="2" style="width: 100%; border: 1px solid #c0392b; background: #fff5f5;">{{ pedido.detalhes_entrega or '' }}</textarea>
+                </div>
+            </div>
         </section>
 
         <section style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #e9ecef;">
             <h2 style="color: var(--azul-acao); margin-top: 0; font-size: 1.4rem;">📦 Itens do Pedido</h2>
             
-            <div style="display: grid; grid-template-columns: 4fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 5px; font-weight: bold; color: #555; font-size: 0.9rem;">
+            <div style="display: grid; grid-template-columns: 3fr 1fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 5px; font-weight: bold; color: #555; font-size: 0.9rem;">
                 <div>Descrição</div>
                 <div>Qtd</div>
                 <div>Unid.</div>
+                <div>Valor Unit. (R$)</div>
                 <div></div>
             </div>
 
             <div id="lista-itens">
                 {% for item in itens %}
-                <div class="linha-item" style="display: grid; grid-template-columns: 4fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 10px; align-items: center;">
+                <div class="linha-item" style="display: grid; grid-template-columns: 3fr 1fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 10px; align-items: center;">
                     <input type="hidden" name="item_id[]" value="{{ item.id }}">
                     
                     <input type="text" name="nome_item[]" value="{{ item.nome_item }}" required style="font-weight: bold;" aria-label="Descrição do Item">
@@ -50,6 +76,8 @@
                         <option value="M" {% if item.unidade_medida == 'M' %}selected{% endif %}>M</option>
                         <option value="L" {% if item.unidade_medida == 'L' %}selected{% endif %}>L</option>
                     </select>
+
+                    <input type="number" step="0.01" name="valor[]" value="{{ item.valor_unitario or '' }}" placeholder="0,00" style="text-align: right;">
 
                     <button type="button" onclick="removerItemExistente(this, '{{ item.id }}')" style="background: #fab1a0; color: #c0392b; padding: 10px; margin: 0;" aria-label="Remover item {{ item.nome_item }}">
                         ✖
@@ -174,7 +202,7 @@
 </div>
 
 <template id="template-novo-item">
-    <div class="linha-item" style="display: grid; grid-template-columns: 4fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 10px; align-items: center;">
+    <div class="linha-item" style="display: grid; grid-template-columns: 3fr 1fr 1fr 1fr 0.5fr; gap: 10px; margin-bottom: 10px; align-items: center;">
         <input type="hidden" name="item_id[]" value=""> 
         
         <input type="text" name="nome_item[]" placeholder="Nome do Item" required style="font-weight: bold;" aria-label="Descrição do Item">
@@ -189,6 +217,8 @@
             <option value="L">L</option>
         </select>
 
+        <input type="number" step="0.01" name="valor[]" placeholder="0,00" style="text-align: right;">
+
         <button type="button" onclick="removerItemNovo(this)" style="background: #fab1a0; color: #c0392b; padding: 10px; margin: 0;" aria-label="Remover item">
             ✖
         </button>
@@ -196,35 +226,20 @@
 </template>
 
 <script>
-    // 1. Adicionar Novo Item (Clonando o template)
     function adicionarItem() {
         const container = document.getElementById('lista-itens');
         const template = document.getElementById('template-novo-item');
         const clone = template.content.cloneNode(true);
         container.appendChild(clone);
     }
-
-    // 2. Remover Item que ACABOU de ser criado (não existe no banco)
-    function removerItemNovo(btn) {
-        btn.parentElement.remove();
-    }
-
-    // 3. Remover Item que JÁ EXISTE no banco (Marca para exclusão)
+    function removerItemNovo(btn) { btn.parentElement.remove(); }
     function removerItemExistente(btn, idItem) {
         if(confirm("Tem certeza que deseja remover este item do pedido?")) {
-            // Adiciona o ID ao input oculto, separado por vírgula
             let inputRemover = document.getElementById('itens_para_remover');
-            if (inputRemover.value) {
-                inputRemover.value += "," + idItem;
-            } else {
-                inputRemover.value = idItem;
-            }
-            // Remove visualmente
+            if (inputRemover.value) { inputRemover.value += "," + idItem; } else { inputRemover.value = idItem; }
             btn.parentElement.remove();
         }
     }
-
-    // Feedback visual de arquivos
     function mostrarNomeArquivoEdit() {
         var input = document.getElementById('arquivo');
         var texto = document.getElementById('texto-arquivo-edit');
@@ -235,6 +250,37 @@
             texto.parentElement.style.backgroundColor = "#e8f5e9";
         }
     }
+
+    // --- NOVA LÓGICA: GATILHO VISUAL DA ENTREGA ---
+    function verificarStatusEntrega() {
+        const status = document.getElementById('id_status').value;
+        const bloco = document.getElementById('bloco-entrega');
+        const dataReal = document.getElementById('id_data_real');
+        
+        if (status.includes("Entregue")) {
+            bloco.style.display = 'block';
+            // Se estiver vazio, preenche com data de hoje
+            if (!dataReal.value) {
+                dataReal.valueAsDate = new Date();
+            }
+        } else {
+            bloco.style.display = 'none';
+        }
+    }
+
+    function toggleDetalhesErro() {
+        const conforme = document.getElementById('id_conforme').value;
+        const divErro = document.getElementById('div-erro-entrega');
+        
+        if (conforme === '0') { // 0 = Não (Teve problema)
+            divErro.style.display = 'block';
+        } else {
+            divErro.style.display = 'none';
+        }
+    }
+
+    // Roda ao carregar para mostrar o bloco se já estiver entregue
+    document.addEventListener("DOMContentLoaded", verificarStatusEntrega);
 </script>
 
 <style>
@@ -244,9 +290,7 @@
             border-bottom: 2px dashed #ddd;
             padding-bottom: 10px;
         }
-        .linha-item input[name="nome_item[]"] {
-            grid-column: span 2;
-        }
+        .linha-item input[name="nome_item[]"] { grid-column: span 2; }
     }
 </style>
 {% endblock %}

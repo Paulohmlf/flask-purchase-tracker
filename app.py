@@ -16,7 +16,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-# Pega a chave secreta do .env
 app.secret_key = os.getenv('SECRET_KEY', 'chave_padrao_se_nao_achar')
 
 UPLOAD_FOLDER = 'static/uploads'
@@ -29,14 +28,13 @@ DB_HOST = os.getenv('DB_HOST')
 DB_USER = os.getenv('DB_USER')
 DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_NAME = os.getenv('DB_NAME')
-# Pega a porta do .env ou usa 3306 como padrão
 DB_PORT = int(os.getenv('DB_PORT', 3306))
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_db_connection():
-    """Conecta usando PyMySQL (Mais estável que o Connector)"""
+    """Conecta usando PyMySQL"""
     try:
         if not DB_HOST or not DB_USER:
             print("❌ ERRO CRÍTICO: Variáveis do .env não encontradas!")
@@ -69,6 +67,16 @@ def salvar_anexos_multiplos(conn, pedido_id, files):
                 VALUES (%s, %s, %s)
             ''', (pedido_id, nome_seguro, nome_original))
     cursor.close()
+
+# --- FUNÇÃO AUXILIAR PARA CONVERTER VALOR R$ ---
+def safe_float(valor_str):
+    """Converte string de dinheiro ou vazio para float seguro"""
+    if not valor_str: return 0.0
+    try:
+        # Se vier com vírgula (formato BR), troca por ponto
+        return float(valor_str.replace(',', '.'))
+    except:
+        return 0.0
 
 @app.route('/', methods=['GET', 'POST'])
 def login():
@@ -193,12 +201,10 @@ def dashboard():
 
     cursor = conn.cursor()
 
-    # Total de registros
     cursor.execute(f'SELECT count(*) as total {sql_joins} {where_clause}', params)
     total_registros = cursor.fetchone()['total']
     total_paginas = math.ceil(total_registros / itens_por_pagina)
     
-    # Busca paginada
     sql_tabela = f'''
         SELECT c.*, e.nome_empresa, u2.nome_completo as nome_comprador 
         {sql_joins} {where_clause} 
@@ -207,14 +213,12 @@ def dashboard():
     cursor.execute(sql_tabela, params + [itens_por_pagina, offset])
     pedidos = cursor.fetchall()
 
-    # Gráfico 1: Status
     sql_status = f"SELECT c.status_compra, COUNT(*) as qtd {sql_joins} {where_clause} GROUP BY c.status_compra"
     cursor.execute(sql_status, params)
     dados_status = cursor.fetchall()
     labels_status = [r['status_compra'] for r in dados_status]
     values_status = [r['qtd'] for r in dados_status]
 
-    # Gráfico 2: Fornecedores (CORREÇÃO AQUI: %%Entregue%%)
     where_forn = where_clause + " AND " if where_clause else "WHERE "
     sql_forn = f"SELECT c.fornecedor, COUNT(*) as qtd {sql_joins} {where_forn} c.status_compra NOT LIKE '%%Entregue%%' GROUP BY c.fornecedor ORDER BY qtd DESC LIMIT 5"
     cursor.execute(sql_forn, params)
@@ -222,19 +226,16 @@ def dashboard():
     labels_forn = [r['fornecedor'] for r in dados_forn]
     values_forn = [r['qtd'] for r in dados_forn]
 
-    # Gráfico 3: Compradores (CORREÇÃO AQUI: %%Entregue%%)
     sql_comp = f"SELECT u2.nome_completo, COUNT(*) as qtd {sql_joins} {where_forn} c.status_compra NOT LIKE '%%Entregue%%' GROUP BY u2.nome_completo"
     cursor.execute(sql_comp, params)
     dados_comp = cursor.fetchall()
     labels_comp = [r['nome_completo'] if r['nome_completo'] else 'Sem Comprador' for r in dados_comp]
     values_comp = [r['qtd'] for r in dados_comp]
 
-    # KPI Timeline
     sql_kpis = f"SELECT c.status_compra, c.prazo_entrega, c.data_entrega_reprogramada {sql_joins} {where_clause}"
     cursor.execute(sql_kpis, params)
     all_orders = cursor.fetchall()
 
-    # Dropdowns
     cursor.execute("SELECT * FROM empresas_compras ORDER BY nome_empresa")
     lista_empresas = cursor.fetchall()
     cursor.execute("SELECT * FROM usuarios WHERE nivel_acesso IN ('comprador', 'admin') ORDER BY nome_completo")
@@ -243,7 +244,6 @@ def dashboard():
     cursor.close()
     conn.close()
 
-    # Processamento Python
     kpis = {'total': len(all_orders), 'abertos': 0, 'atrasados': 0}
     timeline_data = defaultdict(int)
     hoje = date.today()
@@ -254,13 +254,10 @@ def dashboard():
             dt_val = r['data_entrega_reprogramada'] or r['prazo_entrega']
             if dt_val:
                 try:
-                    if isinstance(dt_val, str):
-                        dt_obj = datetime.strptime(dt_val, '%Y-%m-%d').date()
-                    else:
-                        dt_obj = dt_val
+                    if isinstance(dt_val, str): dt_obj = datetime.strptime(dt_val, '%Y-%m-%d').date()
+                    else: dt_obj = dt_val
                     
-                    if (dt_obj - hoje).days <= 0:
-                        kpis['atrasados'] += 1
+                    if (dt_obj - hoje).days <= 0: kpis['atrasados'] += 1
                     start_week = dt_obj - timedelta(days=dt_obj.weekday())
                     timeline_data[start_week] += 1
                 except: pass
@@ -279,32 +276,24 @@ def dashboard():
 
         dt_val = p['data_entrega_reprogramada'] or p['prazo_entrega']
         p_dt_obj = None
-        
         if dt_val:
-            if isinstance(dt_val, str):
-                p_dt_obj = datetime.strptime(dt_val, '%Y-%m-%d').date()
-            else:
-                p_dt_obj = dt_val
+            if isinstance(dt_val, str): p_dt_obj = datetime.strptime(dt_val, '%Y-%m-%d').date()
+            else: p_dt_obj = dt_val
 
         if p_dt_obj and 'Entregue' not in s:
             dias = (p_dt_obj - hoje).days
             if dias <= 0: p.update({'cor_p': '#e74c3c', 'txt_p': 'ATRASADO', 'cor_s': '#e74c3c', 'txt_s': 'ATRASADO'})
             elif dias <= 2: p.update({'cor_p': '#f1c40f', 'txt_p': 'ATENÇÃO'})
             else: p.update({'cor_p': '#2ecc71', 'txt_p': 'NO PRAZO'})
-        else:
-            p.update({'cor_p': 'transparent', 'txt_p': '-'})
+        else: p.update({'cor_p': 'transparent', 'txt_p': '-'})
         
         if p['prazo_entrega']: 
-            if isinstance(p['prazo_entrega'], str):
-                p['prazo_entrega'] = datetime.strptime(p['prazo_entrega'], '%Y-%m-%d').strftime('%d/%m/%Y')
-            else:
-                p['prazo_entrega'] = p['prazo_entrega'].strftime('%d/%m/%Y')
+            if isinstance(p['prazo_entrega'], str): p['prazo_entrega'] = datetime.strptime(p['prazo_entrega'], '%Y-%m-%d').strftime('%d/%m/%Y')
+            else: p['prazo_entrega'] = p['prazo_entrega'].strftime('%d/%m/%Y')
 
         if p['data_entrega_reprogramada']:
-            if isinstance(p['data_entrega_reprogramada'], str):
-                p['data_entrega_reprogramada'] = datetime.strptime(p['data_entrega_reprogramada'], '%Y-%m-%d').strftime('%d/%m/%Y')
-            else:
-                p['data_entrega_reprogramada'] = p['data_entrega_reprogramada'].strftime('%d/%m/%Y')
+            if isinstance(p['data_entrega_reprogramada'], str): p['data_entrega_reprogramada'] = datetime.strptime(p['data_entrega_reprogramada'], '%Y-%m-%d').strftime('%d/%m/%Y')
+            else: p['data_entrega_reprogramada'] = p['data_entrega_reprogramada'].strftime('%d/%m/%Y')
 
     return render_template('dashboard.html', pedidos=pedidos, pagina=pagina, total_paginas=total_paginas,
                            busca=busca, f_solicitacao=f_solicitacao, f_empresa=f_empresa, f_comprador=f_comprador, f_status=f_status,
@@ -338,6 +327,8 @@ def nova_compra():
         
         nomes_itens = f.getlist('nome_item[]')
         qtds_itens = f.getlist('qtd[]')
+        # NOVO: Captura os valores
+        valores_itens = f.getlist('valor[]') 
         
         if not nomes_itens or not nomes_itens[0]:
             erros.append("O item a ser comprado é obrigatório.")
@@ -385,10 +376,18 @@ def nova_compra():
             nome = nomes_itens[i]
             qtd = qtds_itens[i] if i < len(qtds_itens) else 1
             unid = unidades[i] if i < len(unidades) else 'UN'
+            
+            # NOVO: Pega o valor correspondente (ou 0.0 se não tiver)
+            val = safe_float(valores_itens[i]) if i < len(valores_itens) else 0.0
+            
             if nome.strip():
-                cursor.execute('INSERT INTO pedidos_itens (pedido_id, nome_item, quantidade, unidade_medida) VALUES (%s, %s, %s, %s)', (pedido_id, nome, qtd, unid))
+                # ADICIONADO: valor_unitario no INSERT
+                cursor.execute('''INSERT INTO pedidos_itens 
+                    (pedido_id, nome_item, quantidade, unidade_medida, valor_unitario) 
+                    VALUES (%s, %s, %s, %s, %s)''', 
+                    (pedido_id, nome, qtd, unid, val))
 
-        conn.commit() # Commita o pedido e itens antes de salvar anexos
+        conn.commit() 
         
         files = request.files.getlist('arquivo')
         salvar_anexos_multiplos(conn, pedido_id, files)
@@ -425,22 +424,36 @@ def editar_pedido(id):
             if len(nomes_itens) > 1:
                 novo_titulo += f" (+ {len(nomes_itens)-1} itens)"
         
+        # TRATAMENTO DOS NOVOS CAMPOS DE ENTREGA (Boolean e Data)
+        ent_conf = f.get('entrega_conforme')
+        if ent_conf == '1': ent_conf = 1
+        elif ent_conf == '0': ent_conf = 0
+        else: ent_conf = None # Se vazio
+
+        # UPDATE PRINCIPAL
         cursor.execute('''UPDATE acompanhamento_compras SET 
             numero_solicitacao=%s, numero_orcamento=%s, numero_pedido=%s, item_comprado=%s, categoria=%s, 
             fornecedor=%s, data_compra=%s, prazo_entrega=%s, data_entrega_reprogramada=%s, 
             nota_fiscal=%s, serie_nota=%s, status_compra=%s, observacao=%s, 
-            id_responsavel_chamado=%s, id_comprador_responsavel=%s, solicitante_real=%s 
+            id_responsavel_chamado=%s, id_comprador_responsavel=%s, solicitante_real=%s,
+            data_entrega_real=%s, entrega_conforme=%s, detalhes_entrega=%s
             WHERE id=%s''', 
             (f['solicitacao'], f.get('orcamento'), f.get('pedido'), novo_titulo, f.get('categoria'), 
              f['fornecedor'], f.get('data_compra') or None, f.get('prazo') or None, f.get('reprogramada') or None, 
              f.get('nota'), f.get('serie'), f['status'], f.get('observacao'), 
              f.get('resp_chamado') or None, f.get('resp_comprador') or None, 
              f.get('solicitante_real'),
+             # Novos Campos
+             f.get('data_entrega_real') or None, 
+             ent_conf, 
+             f.get('detalhes_entrega'),
              id))
         
         ids_itens = f.getlist('item_id[]')
         qtds_itens = f.getlist('qtd[]')
         unidades = f.getlist('unidade[]')
+        valores_itens = f.getlist('valor[]') # Captura valores na edição
+
         itens_para_remover = f.get('itens_para_remover')
         if itens_para_remover:
             lista_ids = itens_para_remover.split(',')
@@ -452,11 +465,21 @@ def editar_pedido(id):
             nome = nomes_itens[i]
             qtd = qtds_itens[i]
             unid = unidades[i]
+            val = safe_float(valores_itens[i]) if i < len(valores_itens) else 0.0
+
             if nome.strip():
                 if item_id: 
-                    cursor.execute('UPDATE pedidos_itens SET nome_item=%s, quantidade=%s, unidade_medida=%s WHERE id=%s', (nome, qtd, unid, item_id))
+                    # UPDATE com Valor
+                    cursor.execute('''UPDATE pedidos_itens 
+                        SET nome_item=%s, quantidade=%s, unidade_medida=%s, valor_unitario=%s 
+                        WHERE id=%s''', 
+                        (nome, qtd, unid, val, item_id))
                 else: 
-                    cursor.execute('INSERT INTO pedidos_itens (pedido_id, nome_item, quantidade, unidade_medida) VALUES (%s, %s, %s, %s)', (id, nome, qtd, unid))
+                    # INSERT com Valor
+                    cursor.execute('''INSERT INTO pedidos_itens 
+                        (pedido_id, nome_item, quantidade, unidade_medida, valor_unitario) 
+                        VALUES (%s, %s, %s, %s, %s)''', 
+                        (id, nome, qtd, unid, val))
 
         conn.commit()
         

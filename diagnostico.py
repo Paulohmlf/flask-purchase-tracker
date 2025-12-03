@@ -1,53 +1,77 @@
-import sys
 import os
-import time
+import pymysql
+from dotenv import load_dotenv
 
-print("\n--- INICIANDO DIAGNOSTICO ---")
-print(f"Python em uso: {sys.executable}")
+# Carrega as senhas do arquivo .env
+load_dotenv()
 
-print("\n1. Testando Bibliotecas...")
-try:
-    import mysql.connector
-    import dotenv
-    import waitress
-    print("   [OK] Todas as bibliotecas encontradas.")
-except ImportError as e:
-    print(f"   [ERRO FATAL] Falta instalar biblioteca: {e}")
-    input("Pressione Enter para sair..."); sys.exit(1)
+# Configurações do Banco (Lidas do .env)
+DB_HOST = os.getenv('DB_HOST')
+DB_USER = os.getenv('DB_USER')
+DB_PASSWORD = os.getenv('DB_PASSWORD')
+DB_NAME = os.getenv('DB_NAME')
+DB_PORT = int(os.getenv('DB_PORT', 3306))
 
-print("\n2. Testando Importação do App...")
-try:
-    # Tenta importar o app igual o Waitress faria
-    from app import app
-    print("   [OK] App importado com sucesso (Sem erros de sintaxe).")
-except Exception as e:
-    print(f"   [ERRO FATAL] O app.py tem um erro: {e}")
-    import traceback
-    traceback.print_exc()
-    input("Pressione Enter para sair..."); sys.exit(1)
+def atualizar_tabelas():
+    print("🔄 Conectando ao Banco de Dados...")
+    
+    try:
+        conn = pymysql.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+            port=DB_PORT,
+            autocommit=True
+        )
+        cursor = conn.cursor()
+        print("✅ Conectado com sucesso!")
 
-print("\n3. Testando Conexão com Banco de Dados...")
-try:
-    from app import get_db_connection
-    conn = get_db_connection()
-    if conn:
-        print("   [OK] Conexão com MariaDB realizada com sucesso!")
+        # --- 1. Adicionar Colunas na Tabela de PEDIDOS (Cabeçalho) ---
+        print("\n📦 Atualizando tabela 'acompanhamento_compras'...")
+        
+        comandos_pedidos = [
+            # Coluna para Lead Time (Data exata que chegou)
+            "ALTER TABLE acompanhamento_compras ADD COLUMN data_entrega_real DATE",
+            
+            # Coluna Booleana (0 ou 1) para OTIF (Entregue Corretamente?)
+            "ALTER TABLE acompanhamento_compras ADD COLUMN entrega_conforme TINYINT(1) DEFAULT NULL",
+            
+            # Coluna de Texto para Detalhes (O que deu errado?)
+            "ALTER TABLE acompanhamento_compras ADD COLUMN detalhes_entrega TEXT"
+        ]
+
+        for cmd in comandos_pedidos:
+            try:
+                cursor.execute(cmd)
+                print(f"   👉 Executado: {cmd.split('ADD COLUMN')[1].strip()}")
+            except pymysql.err.OperationalError as e:
+                if e.args[0] == 1060: # Erro 1060 = Coluna já existe
+                    print(f"   ⚠️ Coluna já existe (Ignorado): {cmd.split('ADD COLUMN')[1].split()[0]}")
+                else:
+                    print(f"   ❌ Erro: {e}")
+
+        # --- 2. Adicionar Coluna na Tabela de ITENS (Produtos) ---
+        print("\n🛒 Atualizando tabela 'pedidos_itens'...")
+        
+        # Coluna para Análise Financeira (Valor R$)
+        cmd_item = "ALTER TABLE pedidos_itens ADD COLUMN valor_unitario DECIMAL(10,2) DEFAULT 0.00"
+        
+        try:
+            cursor.execute(cmd_item)
+            print(f"   👉 Executado: valor_unitario")
+        except pymysql.err.OperationalError as e:
+            if e.args[0] == 1060:
+                print(f"   ⚠️ Coluna valor_unitario já existe (Ignorado)")
+            else:
+                print(f"   ❌ Erro: {e}")
+
         conn.close()
-    else:
-        print("   [ERRO] O Banco conectou mas retornou vazio. Verifique o arquivo .env")
-except Exception as e:
-    print(f"   [ERRO] Falha ao conectar no banco: {e}")
-    print("   Verifique se o IP 192.168.12.41 está correto e acessível.")
+        print("\n🚀 FASE 1 CONCLUÍDA: Banco de dados atualizado com sucesso!")
 
-print("\n4. Testando Servidor Waitress (Porta 8081)...")
-print("   (Vamos tentar a porta 8081 para evitar conflito com processos zumbis)")
-try:
-    from waitress import serve
-    print("   >>> O servidor vai tentar iniciar agora. Se aparecer 'Serving on...', DEU CERTO!")
-    print("   >>> Acesse http://localhost:8081 para testar.")
-    print("   >>> Pressione Ctrl+C para parar o teste.\n")
-    serve(app, host='0.0.0.0', port=8081)
-except Exception as e:
-    print(f"   [ERRO FATAL] O Waitress falhou: {e}")
+    except Exception as e:
+        print(f"\n❌ ERRO FATAL AO CONECTAR: {e}")
+        print("Verifique se o arquivo .env está correto e se o banco está ligado.")
 
-input("\nDiagnóstico finalizado. Pressione Enter...")
+if __name__ == '__main__':
+    atualizar_tabelas()
