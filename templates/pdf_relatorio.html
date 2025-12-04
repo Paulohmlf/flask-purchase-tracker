@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório de Performance</title>
+    <style>
+        /* CSS Específico para o Motor de PDF (xhtml2pdf) */
+        @page {
+            size: A4;
+            margin: 2cm;
+            margin-bottom: 3cm; /* Aumentei a margem inferior para caber o rodapé */
+            
+            /* Define a área fixa do rodapé */
+            @frame footer_frame {
+                -pdf-frame-content: footerContent; /* Liga ao ID da div do rodapé */
+                bottom: 1cm;
+                margin-left: 2cm;
+                margin-right: 2cm;
+                height: 1cm;
+            }
+        }
+
+        body {
+            font-family: Helvetica, sans-serif;
+            font-size: 10pt;
+            color: #333;
+            line-height: 1.4;
+        }
+
+        /* Cabeçalho */
+        .header {
+            border-bottom: 2px solid #3c7ea8;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            color: #3c7ea8;
+            font-size: 18pt;
+            margin: 0;
+        }
+        .header .meta {
+            font-size: 9pt;
+            color: #666;
+            text-align: right;
+        }
+
+        /* Cards de KPI (Resumo) */
+        .kpi-container {
+            display: block;
+            width: 100%;
+            margin-bottom: 30px;
+        }
+        .kpi-box {
+            display: inline-block;
+            width: 30%;
+            padding: 10px;
+            background-color: #f8fbff;
+            border: 1px solid #ddd;
+            text-align: center;
+            margin-right: 2%;
+        }
+        .kpi-title { font-size: 9pt; color: #555; font-weight: bold; text-transform: uppercase; }
+        .kpi-value { font-size: 16pt; font-weight: bold; color: #2c3e50; margin-top: 5px; }
+        .kpi-value.ok { color: #27ae60; }
+        .kpi-value.alert { color: #c0392b; }
+
+        /* Tabelas */
+        h2 {
+            font-size: 14pt;
+            color: #2c3e50;
+            margin-top: 30px;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+        }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th {
+            background-color: #3c7ea8;
+            color: white;
+            font-weight: bold;
+            text-align: left;
+            padding: 6px;
+            font-size: 9pt;
+        }
+        td {
+            border-bottom: 1px solid #eee;
+            padding: 6px;
+            font-size: 9pt;
+            vertical-align: top;
+        }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        
+        .valor { text-align: right; font-family: monospace; }
+        .badge-ok { color: green; font-weight: bold; }
+        .badge-erro { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="footerContent" style="text-align: right; color: #666; font-size: 9pt; font-family: Helvetica, sans-serif;">
+        Página <pdf:pagenumber> de <pdf:pagecount>
+    </div>
+
+    <div class="header">
+        <div>
+            <h1>Relatório de Performance</h1>
+            <div style="font-size: 10pt; color: #555; margin-top: 5px;">Departamento de Compras - Nutrane</div>
+        </div>
+        <div class="meta">
+            Gerado em: {{ hoje }}<br>
+            Sistema Interno
+        </div>
+    </div>
+
+    <div class="kpi-container">
+        <div class="kpi-box">
+            <div class="kpi-title">Lead Time Médio</div>
+            <div class="kpi-value">{{ kpis.lead_time }} Dias</div>
+        </div>
+        <div class="kpi-box">
+            <div class="kpi-title">Qualidade (OTIF)</div>
+            <div class="kpi-value {% if kpis.otif >= 90 %}ok{% else %}alert{% endif %}">
+                {{ kpis.otif }}%
+            </div>
+        </div>
+        <div class="kpi-box" style="margin-right: 0;">
+            <div class="kpi-title">Pedidos Entregues</div>
+            <div class="kpi-value">{{ entregas|length }}</div>
+        </div>
+    </div>
+
+    <h2>✅ Histórico de Entregas Recentes</h2>
+    {% if entregas %}
+    <table>
+        <thead>
+            <tr>
+                <th width="15%">Data Real</th>
+                <th width="25%">Unidade</th>
+                <th width="25%">Fornecedor</th>
+                <th width="10%">OTIF</th>
+                <th width="25%">Obs / Detalhes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in entregas %}
+            <tr>
+                <td>{{ item.data_entrega_real.strftime('%d/%m/%Y') if item.data_entrega_real else '-' }}</td>
+                <td>{{ item.nome_empresa }}</td>
+                <td>{{ item.fornecedor }}</td>
+                <td>
+                    {% if item.entrega_conforme == 1 %}
+                        <span class="badge-ok">SIM</span>
+                    {% elif item.entrega_conforme == 0 %}
+                        <span class="badge-erro">NÃO</span>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>{{ item.detalhes_entrega or '' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <p style="color: #666; font-style: italic;">Nenhuma entrega registrada no período.</p>
+    {% endif %}
+
+    <h2 style="color: #c0392b; border-color: #c0392b;">⚠️ Pontos de Atenção (Atrasos)</h2>
+    {% if atrasos %}
+    <table>
+        <thead>
+            <tr>
+                <th style="background-color: #c0392b;">Prazo Original</th>
+                <th style="background-color: #c0392b;">Dias de Atraso</th>
+                <th style="background-color: #c0392b;">Unidade</th>
+                <th style="background-color: #c0392b;">Fornecedor</th>
+                <th style="background-color: #c0392b; text-align: right;">Valor (R$)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in atrasos %}
+            <tr>
+                <td>{{ item.prazo_entrega.strftime('%d/%m/%Y') if item.prazo_entrega else '-' }}</td>
+                <td style="color: red; font-weight: bold;">{{ item.dias_atraso }} dias</td>
+                <td>{{ item.nome_empresa }}</td>
+                <td>{{ item.fornecedor }}</td>
+                <td class="valor">{{ "{:,.2f}".format(item.valor_total).replace('.', ',') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <p style="color: green; font-style: italic;">Excelente! Nenhum pedido atrasado no momento.</p>
+    {% endif %}
+
+</body>
+</html>

@@ -272,9 +272,9 @@ def dashboard():
         if s == 'Aguardando Aprovação':
             p.update({'cor_s': '#9b59b6', 'txt_s': 'ORÇAMENTO'})
         elif s in ['Confirmado', 'Orçamento', 'Em Trânsito']:
-            p.update({'cor_s': '#3498db', 'txt_s': 'COMPRADO'})
+            p.update({'cor_s': '#3c7ea8', 'txt_s': 'COMPRADO'}) # Azul Oceano
         elif 'Entregue' in s:
-            p.update({'cor_s': '#2ecc71', 'txt_s': 'ENTREGUE'})
+            p.update({'cor_s': '#0ca956', 'txt_s': 'ENTREGUE'}) # Verde Nutrane
         else:
             p.update({'cor_s': '#95a5a6', 'txt_s': s})
 
@@ -289,11 +289,11 @@ def dashboard():
         if p_dt_obj and 'Entregue' not in s:
             dias = (p_dt_obj - hoje).days
             if dias <= 0:
-                p.update({'cor_p': '#e74c3c', 'txt_p': 'ATRASADO'})
+                p.update({'cor_p': '#dc3545', 'txt_p': 'ATRASADO'}) # Vermelho Erro
             elif dias <= 2:
                 p.update({'cor_p': '#f1c40f', 'txt_p': 'ATENÇÃO'})
             else:
-                p.update({'cor_p': '#2ecc71', 'txt_p': 'NO PRAZO'})
+                p.update({'cor_p': '#0ca956', 'txt_p': 'NO PRAZO'}) # Verde Nutrane
         else:
             p.update({'cor_p': 'transparent', 'txt_p': '-'})
         
@@ -304,167 +304,195 @@ def dashboard():
             if not isinstance(p['data_entrega_reprogramada'], str):
                 p['data_entrega_reprogramada'] = p['data_entrega_reprogramada'].strftime('%d/%m/%Y')
 
+    colors = ['#3c7ea8', '#0ca956', '#f1c40f', '#dc3545', '#9b59b6', '#5d8db5']
+
     return render_template('dashboard.html', pedidos=pedidos, pagina=pagina, total_paginas=total_paginas,
                            busca=busca, f_solicitacao=f_solicitacao, f_empresa=f_empresa, f_comprador=f_comprador, f_status=f_status,
                            f_data_inicio=f_data_inicio, f_data_fim=f_data_fim,
                            lista_empresas=lista_empresas, lista_compradores=lista_compradores, 
                            lista_status=["Aguardando Aprovação", "Orçamento", "Confirmado", "Em Trânsito", "Entregue Parcialmente", "Entregue Totalmente"],
                            kpis=kpis,
-                           graf_status={'labels': [r['status_compra'] for r in dados_status], 'values': [r['qtd'] for r in dados_status]},
+                           graf_status={'labels': [r['status_compra'] for r in dados_status], 'values': [r['qtd'] for r in dados_status], 'colors': colors},
                            graf_forn={'labels': [r['fornecedor'] for r in dados_forn], 'values': [r['qtd'] for r in dados_forn]},
                            graf_comp={'labels': [r['nome_completo'] or 'Sem' for r in dados_comp], 'values': [r['qtd'] for r in dados_comp]},
                            graf_timeline={'labels': [d.strftime('%d/%m') for d in sorted_dates], 'values': [timeline_data[d] for d in sorted_dates]})
 
-# --- ROTA DE PERFORMANCE ---
+# --- ROTA DE PERFORMANCE (COM FILTROS) ---
 @app.route('/performance')
 def performance():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
+    if 'user_id' not in session: return redirect(url_for('login'))
+    
     conn = get_db_connection()
-    if not conn:
-        return "Erro Banco"
+    if not conn: return "Erro Banco"
     cursor = conn.cursor()
 
-    # 1. Lead Time Médio (CORRIGIDO: Agora usa data_registro como início)
-    cursor.execute("""
+    # 1. Captura Filtros da URL
+    f_inicio = request.args.get('inicio', '')
+    f_fim = request.args.get('fim', '')
+    
+    # 2. Monta a cláusula WHERE dinamicamente (baseada em data_registro)
+    where_base = ""
+    params = []
+    
+    if f_inicio and f_fim:
+        where_base = " AND data_registro BETWEEN %s AND %s"
+        params = [f_inicio, f_fim]
+    elif f_inicio:
+        where_base = " AND data_registro >= %s"
+        params = [f_inicio]
+    elif f_fim:
+        where_base = " AND data_registro <= %s"
+        params = [f_fim]
+
+    # --- KPI 1: Lead Time ---
+    cursor.execute(f"""
         SELECT AVG(DATEDIFF(data_entrega_real, data_registro)) as media 
         FROM acompanhamento_compras 
-        WHERE data_entrega_real IS NOT NULL AND data_registro IS NOT NULL
-    """)
+        WHERE data_entrega_real IS NOT NULL {where_base}
+    """, params)
     res_lead = cursor.fetchone()
-    lead_time = res_lead['media'] if res_lead and res_lead['media'] else 0
+    lead_time = round(res_lead['media'] or 0)
 
-    # 2. OTIF
-    cursor.execute("""
+    # --- KPI 2: OTIF (Qualidade) ---
+    cursor.execute(f"""
         SELECT 
             COUNT(*) as total,
             SUM(CASE WHEN entrega_conforme = 1 THEN 1 ELSE 0 END) as perfeitas,
             SUM(CASE WHEN entrega_conforme = 0 THEN 1 ELSE 0 END) as problemas
         FROM acompanhamento_compras 
-        WHERE status_compra LIKE '%%Entregue%%'
-    """)
+        WHERE status_compra LIKE '%%Entregue%%' {where_base}
+    """, params)
     dados_otif = cursor.fetchone()
     
-    total_entregue = dados_otif['total'] if dados_otif and dados_otif['total'] else 1 
-    perfeitas = dados_otif['perfeitas'] if dados_otif and dados_otif['perfeitas'] else 0
-    problemas = dados_otif['problemas'] if dados_otif and dados_otif['problemas'] else 0
-    
+    total_entregue = dados_otif['total'] if dados_otif and dados_otif['total'] else 0
+    perfeitas = dados_otif['perfeitas'] or 0
+    problemas = dados_otif['problemas'] or 0
     pct_otif = round((perfeitas / total_entregue) * 100, 1) if total_entregue > 0 else 0
     nao_avaliados = total_entregue - perfeitas - problemas
-    if nao_avaliados < 0:
-        nao_avaliados = 0
+    if nao_avaliados < 0: nao_avaliados = 0
 
-    # 3. Backlog Financeiro
-    cursor.execute("""
+    # --- KPI 3: Backlog (Financeiro em Aberto) ---
+    cursor.execute(f"""
         SELECT SUM(i.quantidade * i.valor_unitario) as total_money
         FROM pedidos_itens i
         JOIN acompanhamento_compras c ON i.pedido_id = c.id
-        WHERE c.status_compra NOT LIKE '%%Entregue%%'
-    """)
+        WHERE c.status_compra NOT LIKE '%%Entregue%%' {where_base.replace('data_registro', 'c.data_registro')}
+    """, params)
     res_backlog = cursor.fetchone()
-    backlog_val = res_backlog['total_money'] if res_backlog and res_backlog['total_money'] else 0.0
+    backlog_val = res_backlog['total_money'] or 0.0
     backlog_fmt = "{:,.2f}".format(backlog_val).replace(',', 'X').replace('.', ',').replace('X', '.')
 
-    # 4. Atraso por Unidade
-    cursor.execute("""
+    # --- Gráfico 1: Atraso por Unidade ---
+    cursor.execute(f"""
         SELECT 
             e.nome_empresa,
             COUNT(*) as total_pedidos,
             SUM(CASE WHEN c.prazo_entrega < CURDATE() AND c.status_compra NOT LIKE '%%Entregue%%' THEN 1 ELSE 0 END) as atrasados
         FROM acompanhamento_compras c
         JOIN empresas_compras e ON c.codi_empresa = e.codi_empresa
+        WHERE 1=1 {where_base.replace('AND', 'AND c.')}
         GROUP BY e.nome_empresa
         HAVING total_pedidos > 0
         ORDER BY atrasados DESC
-    """)
+    """, params)
     unidades = cursor.fetchall()
+    
     labels_atraso = []
     values_atraso = []
     for u in unidades:
-        taxa = (u['atrasados'] / u['total_pedidos']) * 100
+        taxa = (u['atrasados'] / u['total_pedidos']) * 100 if u['total_pedidos'] > 0 else 0
         labels_atraso.append(u['nome_empresa'])
         values_atraso.append(round(taxa, 1))
 
-    # 5. Falhas Recentes
-    cursor.execute("""
+    # --- Falhas Recentes (Tabela) ---
+    cursor.execute(f"""
         SELECT id, fornecedor, data_entrega_real, detalhes_entrega 
         FROM acompanhamento_compras 
-        WHERE entrega_conforme = 0 
+        WHERE entrega_conforme = 0 {where_base}
         ORDER BY data_entrega_real DESC LIMIT 10
-    """)
+    """, params)
     falhas = cursor.fetchall()
     
     cursor.close()
     conn.close()
 
     return render_template('performance.html',
-                           kpis={'lead_time': round(lead_time), 'otif': pct_otif, 'backlog': backlog_fmt},
+                           kpis={'lead_time': lead_time, 'otif': pct_otif, 'backlog': backlog_fmt},
                            graf_atraso={'labels': labels_atraso, 'dados': values_atraso}, 
                            graf_qualidade=[perfeitas, problemas, nao_avaliados],
-                           falhas=falhas)
+                           falhas=falhas,
+                           filtro_inicio=f_inicio, 
+                           filtro_fim=f_fim)
 
-# --- ROTA GERADORA DE PDF ---
+# --- ROTA PDF (COM FILTROS E NOVO TEMPLATE) ---
 @app.route('/download_performance_pdf')
 def download_performance_pdf():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
+    if 'user_id' not in session: return redirect(url_for('login'))
     
     conn = get_db_connection()
-    if not conn:
-        return "Erro Banco"
+    if not conn: return "Erro Banco"
     cursor = conn.cursor()
 
-    # 1. KPIs Gerais (CORRIGIDO TAMBÉM: DATEDIFF(data_entrega_real, data_registro))
-    cursor.execute("SELECT AVG(DATEDIFF(data_entrega_real, data_registro)) as lead_time FROM acompanhamento_compras WHERE data_entrega_real IS NOT NULL")
+    # Pega os mesmos filtros da URL (passados pelo botão do HTML)
+    f_inicio = request.args.get('inicio', '')
+    f_fim = request.args.get('fim', '')
+    
+    where_base = ""
+    params = []
+    
+    if f_inicio and f_fim:
+        where_base = " AND data_registro BETWEEN %s AND %s"
+        params = [f_inicio, f_fim]
+    elif f_inicio:
+        where_base = " AND data_registro >= %s"
+        params = [f_inicio]
+    elif f_fim:
+        where_base = " AND data_registro <= %s"
+        params = [f_fim]
+
+    # Recalcula tudo com o filtro para o PDF
+    cursor.execute(f"SELECT AVG(DATEDIFF(data_entrega_real, data_registro)) as lead_time FROM acompanhamento_compras WHERE data_entrega_real IS NOT NULL {where_base}", params)
     res_lead = cursor.fetchone()
     lead_time = round(res_lead['lead_time'] or 0)
 
-    cursor.execute("SELECT COUNT(*) as total, SUM(CASE WHEN entrega_conforme = 1 THEN 1 ELSE 0 END) as perfeitas FROM acompanhamento_compras WHERE status_compra LIKE '%%Entregue%%'")
+    cursor.execute(f"SELECT COUNT(*) as total, SUM(CASE WHEN entrega_conforme = 1 THEN 1 ELSE 0 END) as perfeitas FROM acompanhamento_compras WHERE status_compra LIKE '%%Entregue%%' {where_base}", params)
     d_otif = cursor.fetchone()
-    total_otif = d_otif['total'] or 1
-    otif = round((d_otif['perfeitas'] or 0) / total_otif * 100, 1)
+    total_otif = d_otif['total'] if d_otif and d_otif['total'] else 0
+    perfeitas = d_otif['perfeitas'] if d_otif and d_otif['perfeitas'] else 0
+    otif = round((perfeitas / total_otif * 100), 1) if total_otif > 0 else 0
 
-    # 2. Lista Detalhada de Entregas (Com Valor)
-    cursor.execute("""
-        SELECT 
-            c.id, e.nome_empresa, c.fornecedor, c.data_compra, c.prazo_entrega, c.data_entrega_real, c.entrega_conforme, c.detalhes_entrega,
-            (SELECT COALESCE(SUM(i.quantidade * i.valor_unitario), 0) FROM pedidos_itens i WHERE i.pedido_id = c.id) as valor_total
+    # Listas detalhadas para o PDF
+    cursor.execute(f"""
+        SELECT c.id, e.nome_empresa, c.fornecedor, c.data_compra, c.prazo_entrega, c.data_entrega_real, c.entrega_conforme, c.detalhes_entrega,
+        (SELECT COALESCE(SUM(i.quantidade * i.valor_unitario), 0) FROM pedidos_itens i WHERE i.pedido_id = c.id) as valor_total
         FROM acompanhamento_compras c
         JOIN empresas_compras e ON c.codi_empresa = e.codi_empresa
-        WHERE c.status_compra LIKE '%%Entregue%%'
+        WHERE c.status_compra LIKE '%%Entregue%%' {where_base.replace('AND', 'AND c.')}
         ORDER BY c.data_entrega_real DESC
-    """)
+    """, params)
     entregas = cursor.fetchall()
 
-    # 3. Lista Detalhada de Atrasos (Com Valor)
-    cursor.execute("""
-        SELECT 
-            c.id, e.nome_empresa, c.fornecedor, c.prazo_entrega, DATEDIFF(CURDATE(), c.prazo_entrega) as dias_atraso,
-            (SELECT COALESCE(SUM(i.quantidade * i.valor_unitario), 0) FROM pedidos_itens i WHERE i.pedido_id = c.id) as valor_total
+    cursor.execute(f"""
+        SELECT c.id, e.nome_empresa, c.fornecedor, c.prazo_entrega, DATEDIFF(CURDATE(), c.prazo_entrega) as dias_atraso,
+        (SELECT COALESCE(SUM(i.quantidade * i.valor_unitario), 0) FROM pedidos_itens i WHERE i.pedido_id = c.id) as valor_total
         FROM acompanhamento_compras c
         JOIN empresas_compras e ON c.codi_empresa = e.codi_empresa
-        WHERE c.prazo_entrega < CURDATE() AND c.status_compra NOT LIKE '%%Entregue%%'
+        WHERE c.prazo_entrega < CURDATE() AND c.status_compra NOT LIKE '%%Entregue%%' {where_base.replace('AND', 'AND c.')}
         ORDER BY dias_atraso DESC
-    """)
+    """, params)
     atrasos = cursor.fetchall()
     
     cursor.close()
     conn.close()
 
-    html = render_template('pdf_relatorio.html', 
-                           kpis={'lead_time': lead_time, 'otif': otif},
-                           entregas=entregas, 
-                           atrasos=atrasos, 
-                           hoje=date.today().strftime('%d/%m/%Y'))
-    
+    html = render_template('pdf_relatorio.html', kpis={'lead_time': lead_time, 'otif': otif}, entregas=entregas, atrasos=atrasos, hoje=date.today().strftime('%d/%m/%Y'))
     pdf_io = BytesIO()
-    pisa_status = pisa.CreatePDF(html, dest=pdf_io)
-    
-    if pisa_status.err:
-        return "Erro ao gerar PDF", 500
-    
+    pisa.CreatePDF(html, dest=pdf_io)
     pdf_io.seek(0)
-    return send_file(pdf_io, download_name=f"Relatorio_Performance_{date.today()}.pdf", as_attachment=True)
+    
+    nome_arquivo = f"Relatorio_Performance_{f_inicio}_ate_{f_fim}.pdf" if f_inicio else f"Relatorio_Geral_{date.today()}.pdf"
+    
+    return send_file(pdf_io, download_name=nome_arquivo, as_attachment=True)
 
 # --- ROTAS DE CADASTRO E EDIÇÃO ---
 
@@ -492,7 +520,7 @@ def nova_compra():
         if len(names) > 1: 
             title += f" (+ {len(names)-1} itens)"
         
-        # --- ALTERAÇÃO AQUI: INSERE A DATA DO INPUT NO BANCO ---
+        # Insere a data manual do input no banco
         cursor.execute('''
             INSERT INTO acompanhamento_compras 
             (data_registro, data_abertura, numero_solicitacao, numero_orcamento, numero_pedido, item_comprado, categoria, 
@@ -500,7 +528,7 @@ def nova_compra():
              id_responsavel_chamado, id_comprador_responsavel, prazo_entrega, status_compra, solicitante_real) 
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         ''', (
-            f.get('data_registro'), # Pega do Input da Tela
+            f.get('data_registro'), 
             f.get('requisicao'), f.get('solicitacao'), f.get('orcamento'), f.get('pedido'), title, f.get('categoria'), 
             f.get('fornecedor'), f.get('data_compra') or None, f.get('nota'), f.get('serie'), 
             f.get('observacao'), f.get('empresa'), f.get('resp_chamado') or None, 
@@ -558,7 +586,6 @@ def editar_pedido(id):
         elif ent_conf == '0': ent_conf = 0
         else: ent_conf = None
 
-        # --- ALTERAÇÃO AQUI: ATUALIZA A DATA_REGISTRO SE EDITADA ---
         cursor.execute('''
             UPDATE acompanhamento_compras SET 
             data_registro=%s, data_abertura=%s, numero_solicitacao=%s, numero_orcamento=%s, numero_pedido=%s, item_comprado=%s, 
@@ -568,7 +595,7 @@ def editar_pedido(id):
             data_entrega_real=%s, entrega_conforme=%s, detalhes_entrega=%s 
             WHERE id=%s
         ''', (
-            f.get('data_registro'), # Pega o novo valor da edição
+            f.get('data_registro'), 
             f.get('requisicao'), f['solicitacao'], f.get('orcamento'), f.get('pedido'), title, 
             f.get('categoria'), f['fornecedor'], f.get('data_compra') or None, 
             f.get('prazo') or None, f.get('reprogramada') or None, 
@@ -697,14 +724,13 @@ def importar_solicitacao():
     file = request.files['arquivo_pdf']
     dados_pdf = {}
     itens_pdf = []
-    lista_obs = [] # Essa lista existia, mas não estava sendo usada!
+    lista_obs = [] 
     unidades_conhecidas = ['UN', 'PC', 'CX', 'KG', 'M', 'L', 'LITRO', 'METRO', 'PAR', 'UN GERAL']
 
     try:
         with pdfplumber.open(file) as pdf:
             text = pdf.pages[0].extract_text() or ""
             
-            # 1. Captura Cabeçalhos (Solicitação, Data, Empresa)
             if m := re.search(r'Solicitação de Compra:\s*(\d+)', text):
                 dados_pdf['solicitacao'] = m.group(1)
             
@@ -718,7 +744,6 @@ def importar_solicitacao():
             if m := re.search(r'Empresa:\s*(\d+)', text):
                 dados_pdf['empresa'] = m.group(1)
             
-            # 2. Captura Solicitante (Layout)
             texto_layout = pdf.pages[0].extract_text(layout=True) or ""
             if "Requerente" in texto_layout:
                 linhas_layout = texto_layout.split('\n')
@@ -733,21 +758,14 @@ def importar_solicitacao():
                                     break
                         break
 
-            # 3. Varredura Linha a Linha (Itens e OBSERVAÇÕES)
             lines = text.split('\n')
             for i, line in enumerate(lines):
-                
-                # --- NOVA LÓGICA: CAPTURA DE OBSERVAÇÃO ---
-                # Procura por "Observação:" (com dois pontos, comum nos itens)
                 if "Observação:" in line:
-                    # Pega tudo que vem depois dos dois pontos e limpa os espaços
                     obs_texto = line.split("Observação:", 1)[1].strip()
-                    # Remove aspas ou caracteres estranhos que o PDF possa trazer
                     obs_texto = obs_texto.replace('"', '').replace("'", "")
                     if obs_texto:
                         lista_obs.append(obs_texto)
                 
-                # Captura de Itens (Padrão: Código do produto seguido de descrição)
                 if m := re.search(r'^(\d{2}\.\d{2}\.\d{4})\s+(.+)', line):
                     codigo = m.group(1)
                     resto = m.group(2)
@@ -781,9 +799,7 @@ def importar_solicitacao():
         print(f"Erro PDF: {e}")
         flash('Erro ao processar PDF.')
     
-    # 4. Junta todas as observações encontradas e coloca no campo
     if lista_obs:
-        # Junta com quebra de linha para ficar organizado no textarea
         dados_pdf['observacao'] = "\n".join(lista_obs)
 
     conn = get_db_connection()
@@ -799,7 +815,6 @@ def importar_solicitacao():
 
 @app.route('/admin/usuarios', methods=['GET', 'POST'])
 def admin_usuarios():
-    # Verifica se é admin
     if session.get('user_nivel') != 'admin': 
         return redirect(url_for('dashboard'))
     
@@ -810,29 +825,21 @@ def admin_usuarios():
         acao = request.form.get('acao') # aprovar, excluir, promover, rebaixar
         target_id = request.form.get('user_id')
         
-        # Proteção: Não permitir que o usuário exclua ou rebaixe a si mesmo
         if str(target_id) == str(session.get('user_id')) and acao in ['excluir', 'rebaixar']:
             flash('⚠️ Você não pode excluir ou rebaixar sua própria conta!')
         else:
             if acao == 'aprovar':
                 cursor.execute('UPDATE usuarios SET aprovado=1 WHERE id=%s', (target_id,))
                 flash('✅ Usuário aprovado com sucesso!')
-            
             elif acao == 'excluir':
-                # Remove primeiro se tiver pedidos vinculados (opcional, mas seguro) ou apenas o usuário
-                # Aqui vamos excluir apenas o usuário. Se houver FKs, o banco pode reclamar dependendo da config.
-                # Para simplificar e evitar erros de integridade, vamos supor exclusão direta ou soft delete.
-                # Se der erro de FK, ideal seria desativar em vez de excluir, mas aqui segue o delete:
                 try:
                     cursor.execute('DELETE FROM usuarios WHERE id=%s', (target_id,))
                     flash('🗑️ Usuário excluído permanentemente.')
                 except Exception as e:
                     flash('Erro ao excluir: Usuário possui registros vinculados.')
-
             elif acao == 'promover':
                 cursor.execute("UPDATE usuarios SET nivel_acesso='admin' WHERE id=%s", (target_id,))
                 flash('👮 Usuário promovido a ADMIN!')
-
             elif acao == 'rebaixar':
                 cursor.execute("UPDATE usuarios SET nivel_acesso='comprador' WHERE id=%s", (target_id,))
                 flash('⬇️ Usuário rebaixado para Comprador.')
@@ -840,11 +847,9 @@ def admin_usuarios():
             conn.commit()
             return redirect(url_for('admin_usuarios'))
     
-    # Busca Pendentes
     cursor.execute('SELECT * FROM usuarios WHERE aprovado=0')
     pendentes = cursor.fetchall()
 
-    # Busca Ativos (para gerenciar permissões) - Exclui o próprio usuário da lista para evitar acidentes visuais
     cursor.execute('SELECT * FROM usuarios WHERE aprovado=1 ORDER BY nome_completo')
     ativos = cursor.fetchall()
     

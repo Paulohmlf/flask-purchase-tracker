@@ -4,154 +4,292 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-    /* Estilos APENAS para Impressão */
-    @media print {
-        /* Esconde navegação, botões e elementos da tela */
-        nav, .no-print, canvas, .card-grafico { display: none !important; }
-        
-        /* Mostra a área de relatório */
-        .relatorio-impresso { display: block !important; }
-        
-        /* Formatação de Impressão */
-        body { font-family: Arial, sans-serif; background: white; color: black; font-size: 12px; }
-        .container { width: 100%; max-width: 100%; margin: 0; padding: 0; }
-        h1, h2 { color: black; border-bottom: 2px solid #333; margin-top: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; page-break-inside: auto; }
-        th, td { border: 1px solid #999; padding: 5px; text-align: left; font-size: 11px; }
-        th { background-color: #eee; font-weight: bold; }
-        .kpi-resumo { display: flex; justify-content: space-between; margin-bottom: 20px; border: 1px solid #000; padding: 10px; }
-        .kpi-item { text-align: center; }
-        .kpi-valor { font-size: 18px; font-weight: bold; }
+    /* Estilos do Dashboard */
+    .dashboard-header {
+        background-color: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 20px;
+        margin-bottom: 30px;
+        border-bottom: 4px solid var(--azul-oceano);
     }
 
-    /* Esconde o relatório na tela normal */
-    .relatorio-impresso { display: none; }
+    /* O SEGREDO DO ALINHAMENTO: Altura Fixa Unificada */
+    .filter-group, .btn-filtrar, .btn-pdf {
+        height: 42px; /* Todos com a mesma altura */
+        box-sizing: border-box;
+        display: flex;
+        align-items: center; /* Centraliza conteúdo verticalmente */
+    }
+
+    .filter-group {
+        gap: 10px;
+        background-color: #f8f9fa;
+        padding: 0 15px;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+    }
+
+    .filter-input {
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        padding: 5px;
+        color: #495057;
+        font-weight: 500;
+        outline: none;
+        height: 30px; /* Input um pouco menor para caber no grupo */
+    }
+
+    .filter-input:focus {
+        border-color: var(--azul-oceano);
+        box-shadow: 0 0 0 3px rgba(60, 126, 168, 0.2);
+    }
+
+    .btn-filtrar {
+        background-color: var(--azul-oceano);
+        color: white;
+        border: none;
+        padding: 0 20px;
+        border-radius: 6px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: background 0.2s;
+        gap: 8px;
+    }
+
+    .btn-filtrar:hover { background-color: #2b6a94; }
+
+    .btn-pdf {
+        background-color: white;
+        color: var(--verde-nutrane);
+        border: 2px solid var(--verde-nutrane);
+        padding: 0 20px;
+        border-radius: 6px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.2s;
+        gap: 8px;
+        text-decoration: none;
+    }
+
+    .btn-pdf:hover {
+        background-color: var(--verde-nutrane);
+        color: white;
+    }
+
+    /* Cards de KPI */
+    .kpi-card {
+        background: white;
+        padding: 25px;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transition: transform 0.2s;
+        border-left: 5px solid transparent;
+    }
+
+    .kpi-card:hover { transform: translateY(-5px); }
+
+    .kpi-info h3 { margin: 0; font-size: 0.9rem; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+    .kpi-info .valor { font-size: 2.2rem; font-weight: 800; margin-top: 5px; color: #2c3e50; }
+    
+    .kpi-icon {
+        width: 60px; height: 60px;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 2rem;
+        opacity: 0.2;
+    }
+
+    .kpi-blue { border-left-color: var(--azul-oceano); }
+    .kpi-blue .kpi-icon { background: var(--azul-oceano); color: var(--azul-oceano); opacity: 0.15; }
+    .kpi-blue .valor { color: var(--azul-oceano); }
+
+    .kpi-green { border-left-color: var(--verde-nutrane); }
+    .kpi-green .kpi-icon { background: var(--verde-nutrane); color: var(--verde-nutrane); opacity: 0.15; }
+    .kpi-green .valor { color: var(--verde-nutrane); }
+
+    .kpi-orange { border-left-color: #f39c12; }
+    .kpi-orange .kpi-icon { background: #f39c12; color: #f39c12; opacity: 0.15; }
+    .kpi-orange .valor { color: #d35400; }
+
+    .chart-container {
+        background: white;
+        padding: 25px;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        border: 1px solid #f0f0f0;
+    }
+    
+    .chart-header {
+        display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+        border-bottom: 1px solid #eee; padding-bottom: 10px;
+    }
+    .chart-header h3 { margin: 0; color: #555; font-size: 1.2rem; }
 </style>
 
-<div class="no-print" style="margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center;">
+<div class="dashboard-header">
     <div>
-        <h1 style="color: #8e44ad; font-size: 2.2rem; display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
-            <span class="material-icons" style="font-size: 2.5rem;">insights</span> 
-            Painel de Performance
+        <h1 style="margin: 0; color: var(--azul-oceano); font-size: 1.8rem; display: flex; align-items: center; gap: 10px;">
+            <span class="material-icons">insights</span> Performance
         </h1>
-        <p style="color: #666; font-size: 1.1rem; margin: 0;">
-            Análise estratégica de prazos, qualidade e financeiro.
-        </p>
+        <p style="margin: 0; color: #999; font-size: 0.9rem;">Visão estratégica de compras</p>
+    </div>
+
+    <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+        
+        <form action="{{ url_for('performance') }}" method="GET" style="display: flex; gap: 10px; align-items: center; margin: 0;">
+            <div class="filter-group">
+                <span class="material-icons" style="font-size: 1.2rem; color: #999;">calendar_today</span>
+                <input type="date" name="inicio" class="filter-input" value="{{ filtro_inicio }}" title="Data Início">
+                <span style="color: #ccc; font-size: 0.9rem;">até</span>
+                <input type="date" name="fim" class="filter-input" value="{{ filtro_fim }}" title="Data Fim">
+            </div>
+            
+            <button type="submit" class="btn-filtrar">
+                <span class="material-icons">filter_list</span> Filtrar
+            </button>
+            
+            {% if filtro_inicio or filtro_fim %}
+                <a href="{{ url_for('performance') }}" style="color: #999; text-decoration: none; font-size: 0.9rem; margin-left: 5px;" title="Limpar Filtros">✖</a>
+            {% endif %}
+        </form>
+
+        <div style="height: 30px; width: 1px; background: #e0e0e0; margin: 0 5px;"></div>
+
+        <a href="{{ url_for('download_performance_pdf', inicio=filtro_inicio, fim=filtro_fim) }}" style="text-decoration: none;">
+            <div class="btn-pdf">
+                <span class="material-icons">picture_as_pdf</span> Relatório PDF
+            </div>
+        </a>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px; margin-bottom: 40px;">
+    
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-info">
+            <h3>Lead Time Médio</h3>
+            <div class="valor">{{ kpis.lead_time }} <span style="font-size: 1rem; font-weight: normal;">dias</span></div>
+        </div>
+        <div class="kpi-icon">
+            <span class="material-icons">schedule</span>
+        </div>
     </div>
     
-    <button onclick="window.print()" style="width: auto; margin: 0; background-color: #27ae60; padding: 12px 25px; font-size: 1rem; display: flex; align-items: center; gap: 10px; color: white; cursor: pointer;">
-        <span class="material-icons">print</span> Imprimir Relatório PDF
-    </button>
-</div>
-
-<div class="no-print" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 25px; margin-bottom: 40px;">
-    <div class="card" style="border-left: 6px solid #3498db; padding: 25px;">
-        <span style="display: block; color: #555; font-weight: bold;">LEAD TIME MÉDIO</span>
-        <span style="font-size: 2.5rem; font-weight: bold; color: #2c3e50;">{{ kpis.lead_time }} dias</span>
+    <div class="kpi-card kpi-green">
+        <div class="kpi-info">
+            <h3>Qualidade (OTIF)</h3>
+            <div class="valor">{{ kpis.otif }}<span style="font-size: 1.5rem;">%</span></div>
+        </div>
+        <div class="kpi-icon">
+            <span class="material-icons">verified</span>
+        </div>
     </div>
-    <div class="card" style="border-left: 6px solid #2ecc71; padding: 25px;">
-        <span style="display: block; color: #555; font-weight: bold;">OTIF (Entregas Perfeitas)</span>
-        <span style="font-size: 2.5rem; font-weight: bold; color: {% if kpis.otif >= 90 %}#27ae60{% elif kpis.otif >= 70 %}#f39c12{% else %}#c0392b{% endif %};">{{ kpis.otif }}%</span>
-    </div>
-    <div class="card" style="border-left: 6px solid #f1c40f; padding: 25px;">
-        <span style="display: block; color: #555; font-weight: bold;">BACKLOG (R$)</span>
-        <span style="font-size: 2rem; font-weight: bold; color: #d35400;">R$ {{ kpis.backlog }}</span>
-    </div>
-</div>
-
-<div class="no-print" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 30px;">
-    <div class="card card-grafico" style="padding: 20px;">
-        <h3 style="text-align: center; color: #555;">📉 Taxa de Atraso por Unidade (%)</h3>
-        <div style="height: 300px;"><canvas id="chartAtraso"></canvas></div>
-    </div>
-    <div class="card card-grafico" style="padding: 20px;">
-        <h3 style="text-align: center; color: #555;">📦 Qualidade das Entregas</h3>
-        <div style="height: 300px;"><canvas id="chartQualidade"></canvas></div>
+    
+    <div class="kpi-card kpi-orange">
+        <div class="kpi-info">
+            <h3>Backlog Financeiro</h3>
+            <div class="valor" style="font-size: 1.8rem;">R$ {{ kpis.backlog }}</div>
+        </div>
+        <div class="kpi-icon">
+            <span class="material-icons">monetization_on</span>
+        </div>
     </div>
 </div>
 
-<div class="relatorio-impresso">
-    <h1>Relatório de Performance de Compras</h1>
-    <div style="margin-bottom: 10px;">Gerado em: {{ hoje }}</div>
-
-    <div class="kpi-resumo">
-        <div class="kpi-item">Lead Time: <div class="kpi-valor">{{ kpis.lead_time }} dias</div></div>
-        <div class="kpi-item">OTIF: <div class="kpi-valor">{{ kpis.otif }}%</div></div>
-        <div class="kpi-item">Backlog: <div class="kpi-valor">R$ {{ kpis.backlog }}</div></div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 30px;">
+    
+    <div class="chart-container">
+        <div class="chart-header">
+            <span class="material-icons" style="color: #c0392b;">trending_down</span>
+            <h3>Taxa de Atraso por Unidade</h3>
+        </div>
+        <div style="height: 300px;">
+            <canvas id="chartAtraso"></canvas>
+        </div>
     </div>
 
-    <h2>📦 Histórico Completo de Entregas</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Data Real</th>
-                <th>Unidade</th>
-                <th>Fornecedor</th>
-                <th>OTIF</th>
-                <th>Valor (R$)</th>
-                <th>Obs</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in lista_entregas %}
-            <tr>
-                <td>{% if item.data_entrega_real %}{{ item.data_entrega_real.strftime('%d/%m/%Y') }}{% endif %}</td>
-                <td>{{ item.nome_empresa }}</td>
-                <td>{{ item.fornecedor }}</td>
-                <td>{{ 'SIM' if item.entrega_conforme == 1 else 'NÃO' if item.entrega_conforme == 0 else '-' }}</td>
-                <td style="text-align: right;">{{ "{:,.2f}".format(item.valor_total).replace('.', ',') }}</td>
-                <td>{{ item.detalhes_entrega or '' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <h2 style="color: #c0392b;">⚠️ Pedidos em Atraso (Crítico)</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Prazo Original</th>
-                <th>Dias Atraso</th>
-                <th>Unidade</th>
-                <th>Fornecedor</th>
-                <th>Valor em Aberto (R$)</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in lista_atrasos %}
-            <tr>
-                <td>{% if item.prazo_entrega %}{{ item.prazo_entrega.strftime('%d/%m/%Y') }}{% endif %}</td>
-                <td style="color: red; font-weight: bold;">{{ item.dias_atraso }} dias</td>
-                <td>{{ item.nome_empresa }}</td>
-                <td>{{ item.fornecedor }}</td>
-                <td style="text-align: right;">{{ "{:,.2f}".format(item.valor_total).replace('.', ',') }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="chart-container">
+        <div class="chart-header">
+            <span class="material-icons" style="color: var(--verde-nutrane);">pie_chart</span>
+            <h3>Status das Entregas</h3>
+        </div>
+        <div style="height: 300px; position: relative;">
+            <canvas id="chartQualidade"></canvas>
+            
+            {% if graf_qualidade[0] == 0 and graf_qualidade[1] == 0 and graf_qualidade[2] == 0 %}
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #999;">
+                <span class="material-icons" style="font-size: 3rem; display: block; margin-bottom: 10px; color: #eee;">donut_large</span>
+                Sem dados no período
+            </div>
+            {% endif %}
+        </div>
+    </div>
 </div>
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        // Gráficos (Só aparecem na tela)
+        // Gráficos
         const ctxAtraso = document.getElementById('chartAtraso').getContext('2d');
+        const dadosAtraso = {{ graf_atraso.dados | tojson }};
+        const labelsAtraso = {{ graf_atraso.labels | tojson }};
+
         new Chart(ctxAtraso, {
             type: 'bar',
             data: {
-                labels: {{ graf_atraso.labels | tojson }},
-                datasets: [{ label: '% de Atraso', data: {{ graf_atraso.dados | tojson }}, backgroundColor: 'rgba(231, 76, 60, 0.7)' }]
+                labels: labelsAtraso.length ? labelsAtraso : ['Sem dados'],
+                datasets: [{ 
+                    label: '% Atraso', 
+                    data: dadosAtraso.length ? dadosAtraso : [0], 
+                    backgroundColor: 'rgba(231, 76, 60, 0.8)',
+                    borderRadius: 6,
+                    barThickness: 40
+                }]
             },
-            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false }
+            options: { 
+                indexAxis: 'y', 
+                responsive: true, 
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' } },
+                    y: { grid: { display: false } }
+                }
+            }
         });
 
         const ctxQualidade = document.getElementById('chartQualidade').getContext('2d');
+        const dadosQualidade = {{ graf_qualidade | tojson }};
+        const temDados = dadosQualidade.some(x => x > 0);
+        
         new Chart(ctxQualidade, {
             type: 'doughnut',
             data: {
                 labels: ['Perfeitas (OTIF)', 'Com Problemas', 'Não Avaliadas'],
-                datasets: [{ data: {{ graf_qualidade | tojson }}, backgroundColor: ['#2ecc71', '#e74c3c', '#bdc3c7'] }]
+                datasets: [{ 
+                    data: temDados ? dadosQualidade : [1], 
+                    backgroundColor: temDados ? ['#0ca956', '#dc3545', '#95a5a6'] : ['#f0f0f0'],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
             },
-            options: { responsive: true, maintainAspectRatio: false }
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false,
+                cutout: '75%', 
+                plugins: {
+                    legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20 } },
+                    tooltip: { enabled: temDados }
+                }
+            }
         });
     });
 </script>

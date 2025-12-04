@@ -7,7 +7,8 @@
     
     <div style="flex: 1; min-width: 250px;">
         <h1 style="margin-bottom: 5px; border: none; font-size: 2rem; color: #2c3e50; margin-top: 0;">
-            👋 Olá, {{ session.get('user_name', 'Comprador') }}
+            {% set nomes = session.get('user_name', 'Comprador').split() %}
+            👋 Olá, {{ nomes[0] }} {% if nomes|length > 1 %}{{ nomes[-1] }}{% endif %}
         </h1>
         <p style="color: #444; margin: 0; font-size: 1.1rem;">
             Acompanhe abaixo os pedidos e entregas da Nutrane.
@@ -219,7 +220,7 @@
 <div id="aba-geral" style="display: none;">
     
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
-        <div class="card" style="background: linear-gradient(135deg, #3498db, #2980b9); color: white; border: none; padding: 25px; text-align: center;">
+        <div class="card" style="background: linear-gradient(135deg, #3c7ea8, #2980b9); color: white; border: none; padding: 25px; text-align: center;">
             <div style="font-size: 3.5rem; font-weight: bold; line-height: 1;">{{ kpis.total }}</div>
             <div style="font-size: 1.1rem; opacity: 0.9;">Total Filtrado</div>
         </div>
@@ -227,7 +228,7 @@
             <div style="font-size: 3.5rem; font-weight: bold; line-height: 1;">{{ kpis.abertos }}</div>
             <div style="font-size: 1.1rem; opacity: 0.9;">Pedidos em Aberto</div>
         </div>
-        <div class="card" style="background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; border: none; padding: 25px; text-align: center;">
+        <div class="card" style="background: linear-gradient(135deg, #dc3545, #c0392b); color: white; border: none; padding: 25px; text-align: center;">
             <div style="font-size: 3.5rem; font-weight: bold; line-height: 1;">{{ kpis.atrasados }}</div>
             <div style="font-size: 1.1rem; opacity: 0.9;">Atrasados</div>
         </div>
@@ -295,7 +296,8 @@
         try {
             if (typeof Chart === 'undefined') return;
 
-            const colors = ['#3498db', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6', '#34495e'];
+            // Cores novas do sistema
+            const colors = ['#3c7ea8', '#0ca956', '#f1c40f', '#dc3545', '#9b59b6', '#5d8db5'];
 
             const statusData = { 
                 labels: {{ graf_status['labels'] | tojson }}, 
@@ -317,13 +319,13 @@
                 datasets: [{
                     label: 'Entregas Previstas',
                     data: {{ graf_timeline['values'] | tojson }},
-                    borderColor: '#27ae60',
-                    backgroundColor: 'rgba(39, 174, 96, 0.2)',
+                    borderColor: '#0ca956',
+                    backgroundColor: 'rgba(12, 169, 86, 0.2)',
                     borderWidth: 3,
                     tension: 0.4,
                     fill: true,
                     pointRadius: 5,
-                    pointBackgroundColor: '#27ae60'
+                    pointBackgroundColor: '#0ca956'
                 }]
             };
 

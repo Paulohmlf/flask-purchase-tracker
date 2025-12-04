@@ -70,7 +70,7 @@
                 ⚠️ Confirmação Necessária
             </h3>
             <p id="modalMessage" style="font-size: 1.2rem; margin-bottom: 30px;">
-                Tem certeza que deseja APAGAR este item? Esta ação não pode ser desfeita.
+                Tem certeza que deseja APAGAR este item?
             </p>
             <div style="display: flex; gap: 15px;">
                 <button id="cancelButton" type="button" style="flex: 1; margin: 0; background-color: #95a5a6;" onclick="esconderModal()">
@@ -86,7 +86,6 @@
     </div>
 
     <script>
-        // --- LÓGICA DO MODAL DE EXCLUSÃO ---
         function mostrarModal(url, tipo = 'pedido') {
             document.getElementById('confirmLink').href = url;
             if (tipo === 'anexo') {
@@ -102,23 +101,25 @@
             document.getElementById('confirmModal').style.display = 'none';
         }
 
-        // --- LÓGICA DE TRANSIÇÃO E LOADING (NOVO) ---
+        // --- SCRIPT CORRIGIDO: EVITA LOADING SE CANCELAR ---
         document.addEventListener("DOMContentLoaded", function() {
             const loader = document.getElementById('loading-overlay');
 
-            // 1. Mostrar loading SOMENTE ao enviar formulários (Salvar, Filtrar, Importar)
-            // Isso evita o "piscar" na navegação normal pelos menus
             document.querySelectorAll('form').forEach(form => {
-                form.addEventListener('submit', function() {
-                    // Não mostra se o formulário abrir em nova aba (target="_blank")
+                form.addEventListener('submit', function(event) {
+                    
+                    // AQUI ESTÁ A CORREÇÃO:
+                    // Se o usuário clicou em "Cancelar" no confirm(), o navegador ativa essa flag.
+                    // Nós checamos isso e paramos o código, evitando mostrar o loading.
+                    if (event.defaultPrevented) return; 
+
                     if (!this.target) {
                         loader.style.display = 'flex';
                     }
                 });
             });
 
-            // 2. Ocultar loading se o usuário voltar a página (botão voltar do navegador)
-            // (Correção para cache de página bfcache)
+            // 2. Ocultar loading se o usuário voltar a página
             window.addEventListener('pageshow', function(event) {
                 if (event.persisted) {
                     loader.style.display = 'none';
