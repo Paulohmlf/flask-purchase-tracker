@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+    /* Estilos APENAS para Impressão */
+    @media print {
+        /* Esconde navegação, botões e elementos da tela */
+        nav, .no-print, canvas, .card-grafico { display: none !important; }
+        
+        /* Mostra a área de relatório */
+        .relatorio-impresso { display: block !important; }
+        
+        /* Formatação de Impressão */
+        body { font-family: Arial, sans-serif; background: white; color: black; font-size: 12px; }
+        .container { width: 100%; max-width: 100%; margin: 0; padding: 0; }
+        h1, h2 { color: black; border-bottom: 2px solid #333; margin-top: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; page-break-inside: auto; }
+        th, td { border: 1px solid #999; padding: 5px; text-align: left; font-size: 11px; }
+        th { background-color: #eee; font-weight: bold; }
+        .kpi-resumo { display: flex; justify-content: space-between; margin-bottom: 20px; border: 1px solid #000; padding: 10px; }
+        .kpi-item { text-align: center; }
+        .kpi-valor { font-size: 18px; font-weight: bold; }
+    }
+
+    /* Esconde o relatório na tela normal */
+    .relatorio-impresso { display: none; }
+</style>
+
+<div class="no-print" style="margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        <h1 style="color: #8e44ad; font-size: 2.2rem; display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+            <span class="material-icons" style="font-size: 2.5rem;">insights</span> 
+            Painel de Performance
+        </h1>
+        <p style="color: #666; font-size: 1.1rem; margin: 0;">
+            Análise estratégica de prazos, qualidade e financeiro.
+        </p>
+    </div>
+    
+    <button onclick="window.print()" style="width: auto; margin: 0; background-color: #27ae60; padding: 12px 25px; font-size: 1rem; display: flex; align-items: center; gap: 10px; color: white; cursor: pointer;">
+        <span class="material-icons">print</span> Imprimir Relatório PDF
+    </button>
+</div>
+
+<div class="no-print" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 25px; margin-bottom: 40px;">
+    <div class="card" style="border-left: 6px solid #3498db; padding: 25px;">
+        <span style="display: block; color: #555; font-weight: bold;">LEAD TIME MÉDIO</span>
+        <span style="font-size: 2.5rem; font-weight: bold; color: #2c3e50;">{{ kpis.lead_time }} dias</span>
+    </div>
+    <div class="card" style="border-left: 6px solid #2ecc71; padding: 25px;">
+        <span style="display: block; color: #555; font-weight: bold;">OTIF (Entregas Perfeitas)</span>
+        <span style="font-size: 2.5rem; font-weight: bold; color: {% if kpis.otif >= 90 %}#27ae60{% elif kpis.otif >= 70 %}#f39c12{% else %}#c0392b{% endif %};">{{ kpis.otif }}%</span>
+    </div>
+    <div class="card" style="border-left: 6px solid #f1c40f; padding: 25px;">
+        <span style="display: block; color: #555; font-weight: bold;">BACKLOG (R$)</span>
+        <span style="font-size: 2rem; font-weight: bold; color: #d35400;">R$ {{ kpis.backlog }}</span>
+    </div>
+</div>
+
+<div class="no-print" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 30px;">
+    <div class="card card-grafico" style="padding: 20px;">
+        <h3 style="text-align: center; color: #555;">📉 Taxa de Atraso por Unidade (%)</h3>
+        <div style="height: 300px;"><canvas id="chartAtraso"></canvas></div>
+    </div>
+    <div class="card card-grafico" style="padding: 20px;">
+        <h3 style="text-align: center; color: #555;">📦 Qualidade das Entregas</h3>
+        <div style="height: 300px;"><canvas id="chartQualidade"></canvas></div>
+    </div>
+</div>
+
+<div class="relatorio-impresso">
+    <h1>Relatório de Performance de Compras</h1>
+    <div style="margin-bottom: 10px;">Gerado em: {{ hoje }}</div>
+
+    <div class="kpi-resumo">
+        <div class="kpi-item">Lead Time: <div class="kpi-valor">{{ kpis.lead_time }} dias</div></div>
+        <div class="kpi-item">OTIF: <div class="kpi-valor">{{ kpis.otif }}%</div></div>
+        <div class="kpi-item">Backlog: <div class="kpi-valor">R$ {{ kpis.backlog }}</div></div>
+    </div>
+
+    <h2>📦 Histórico Completo de Entregas</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Data Real</th>
+                <th>Unidade</th>
+                <th>Fornecedor</th>
+                <th>OTIF</th>
+                <th>Valor (R$)</th>
+                <th>Obs</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in lista_entregas %}
+            <tr>
+                <td>{% if item.data_entrega_real %}{{ item.data_entrega_real.strftime('%d/%m/%Y') }}{% endif %}</td>
+                <td>{{ item.nome_empresa }}</td>
+                <td>{{ item.fornecedor }}</td>
+                <td>{{ 'SIM' if item.entrega_conforme == 1 else 'NÃO' if item.entrega_conforme == 0 else '-' }}</td>
+                <td style="text-align: right;">{{ "{:,.2f}".format(item.valor_total).replace('.', ',') }}</td>
+                <td>{{ item.detalhes_entrega or '' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2 style="color: #c0392b;">⚠️ Pedidos em Atraso (Crítico)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Prazo Original</th>
+                <th>Dias Atraso</th>
+                <th>Unidade</th>
+                <th>Fornecedor</th>
+                <th>Valor em Aberto (R$)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in lista_atrasos %}
+            <tr>
+                <td>{% if item.prazo_entrega %}{{ item.prazo_entrega.strftime('%d/%m/%Y') }}{% endif %}</td>
+                <td style="color: red; font-weight: bold;">{{ item.dias_atraso }} dias</td>
+                <td>{{ item.nome_empresa }}</td>
+                <td>{{ item.fornecedor }}</td>
+                <td style="text-align: right;">{{ "{:,.2f}".format(item.valor_total).replace('.', ',') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Gráficos (Só aparecem na tela)
+        const ctxAtraso = document.getElementById('chartAtraso').getContext('2d');
+        new Chart(ctxAtraso, {
+            type: 'bar',
+            data: {
+                labels: {{ graf_atraso.labels | tojson }},
+                datasets: [{ label: '% de Atraso', data: {{ graf_atraso.dados | tojson }}, backgroundColor: 'rgba(231, 76, 60, 0.7)' }]
+            },
+            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false }
+        });
+
+        const ctxQualidade = document.getElementById('chartQualidade').getContext('2d');
+        new Chart(ctxQualidade, {
+            type: 'doughnut',
+            data: {
+                labels: ['Perfeitas (OTIF)', 'Com Problemas', 'Não Avaliadas'],
+                datasets: [{ data: {{ graf_qualidade | tojson }}, backgroundColor: ['#2ecc71', '#e74c3c', '#bdc3c7'] }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    });
+</script>
+{% endblock %}

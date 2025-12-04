@@ -109,6 +109,18 @@
         <div style="background-color: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #cfe2ff;">
             <h2 style="color: #004085; margin-top: 0; font-size: 1.4rem;">2. Números e Prazos</h2>
             
+            <div style="background-color: #fff3e0; padding: 10px; border-radius: 5px; border: 1px solid #ffe0b2; margin-bottom: 15px;">
+                <label for="id_data_registro" style="color: #e67e22; font-weight: bold; margin-top: 0;">📅 Data do Documento (PDF):</label>
+                <input 
+                    type="date" 
+                    id="id_data_registro" 
+                    name="data_registro" 
+                    value="{{ dados_form.get('data_registro', '') }}" 
+                    style="font-weight: bold; color: #d35400; border-color: #e67e22;"
+                >
+                <span class="ajuda-campo" style="margin-top: 2px;">Data extraída do PDF. Confira se está correta.</span>
+            </div>
+
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
                 <div>
                     <label for="id_solicitacao">Nº Solicitação :</label>

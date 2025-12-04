@@ -115,6 +115,9 @@
             </div>
             
             <div>
+                <label for="id_data_registro" style="color: #d35400;">📅 Data de Abertura:</label>
+                <input type="date" id="id_data_registro" name="data_registro" value="{{ pedido.data_registro.strftime('%Y-%m-%d') if pedido.data_registro else '' }}">
+
                 <label for="id_data_compra">Data da Compra:</label>
                 <input type="date" id="id_data_compra" name="data_compra" value="{{ pedido.data_compra or '' }}">
                 
@@ -134,7 +137,10 @@
                 
                 <hr style="margin: 20px 0;">
                 
-                <label for="id_resp_comprador">Comprador Responsável:</label>
+                <label for="id_solicitante_real">Solicitante Real (Quem pediu na ponta?):</label>
+                <input type="text" id="id_solicitante_real" name="solicitante_real" value="{{ pedido.solicitante_real or '' }}" placeholder="Ex: João da Manutenção" style="background-color: #f0f7ff;">
+
+                <label for="id_resp_comprador">Comprador Responsável (Sistema):</label>
                 <select id="id_resp_comprador" name="resp_comprador">
                     <option value="">-- Selecione o Comprador --</option>
                     {% for u in usuarios %}
@@ -144,7 +150,7 @@
                     {% endfor %}
                 </select>
                 
-                <label for="id_resp_chamado">Responsável pelo Chamado:</label>
+                <label for="id_resp_chamado">Responsável pelo Chamado (Sistema):</label>
                 <select id="id_resp_chamado" name="resp_chamado">
                     <option value="">-- Selecione o Solicitante --</option>
                     {% for u in usuarios %}

@@ -1,36 +1,52 @@
-/* static/style.css - Versão Acessível e Inclusiva */
+/* static/style.css - Versão Estável (Correção de Piscar e Transições) */
 
 :root {
-    /* Paleta de Cores de Alto Contraste e Significado Claro */
-    --cor-fundo: #F0F2F5;       /* Cinza muito claro, descansa a vista */
-    --cor-texto: #1A1A1A;       /* Preto suave, melhor que preto puro */
+    /* --- PALETA DE CORES (Identidade Azul/Verde) --- */
+    --azul-oceano: #3c7ea8;   /* Azul do lado esquerdo */
+    --verde-nutrane: #0ca956; /* Verde do lado direito */
+    --azul-filtro: #5d8db5;   /* Azul intermediário */
+
+    /* Mapeamento Semântico */
+    --cor-fundo: #F0F2F5;       /* Cinza muito claro */
+    --cor-texto: #1A1A1A;       /* Preto suave */
     --cor-fundo-card: #FFFFFF;
     
-    /* Cores de Ação (Semântica) */
-    --azul-acao: #0056b3;       /* Azul forte e confiável para ações principais */
-    --azul-foco: #80bdff;       /* Halo de foco para saber onde está */
-    --verde-sucesso: #1e7e34;   /* Verde escuro (legível em fundo claro) */
-    --vermelho-erro: #dc3545;   /* Vermelho padrão de alerta */
-    --amarelo-atencao: #856404; /* Amarelo escuro para texto (contraste) */
+    /* Cores de Ação */
+    --azul-acao: var(--azul-oceano);       
+    --verde-sucesso: var(--verde-nutrane); 
     
-    /* Tamanhos Base - Tudo começa grande */
-    --tamanho-texto: 1.2rem;    /* aprox. 19px - Bem legível */
-    --espaco-toque: 60px;       /* Área mínima para dedos (touch) */
+    /* Auxiliares */
+    --azul-foco: #80bdff;       
+    --vermelho-erro: #dc3545;   
+    --amarelo-atencao: #856404; 
+    
+    /* Tamanhos Base */
+    --tamanho-texto: 1.2rem;    
+    --espaco-toque: 60px;       
 }
 
-/* Reset básico focado em clareza */
+/* Reset básico */
 * {
     box-sizing: border-box;
 }
 
+/* --- CORREÇÃO DO PISCAR (IMPORTANTE) --- */
+html {
+    /* Pinta o fundo "de trás" do navegador para evitar o clarão branco */
+    background-color: var(--cor-fundo);
+}
+
 body {
-    font-family: 'Verdana', 'Segoe UI', sans-serif; /* Fontes largas e abertas */
+    font-family: 'Verdana', 'Segoe UI', sans-serif;
     background-color: var(--cor-fundo);
     color: var(--cor-texto);
     font-size: var(--tamanho-texto);
-    line-height: 1.6; /* Espaço entre linhas para não embaralhar a leitura */
+    line-height: 1.6;
     margin: 0;
     padding: 20px;
+    
+    /* Animação suave de entrada (apenas opacidade) */
+    animation: fadeIn 0.4s ease-out forwards;
 }
 
 /* O "Palco" Central */
@@ -40,17 +56,25 @@ body {
     padding: 0 10px;
 }
 
-/* Cartões: Onde a mágica acontece */
+/* Cartões */
 .card {
     background: var(--cor-fundo-card);
-    padding: 2rem; /* Espaço interno generoso */
-    border-radius: 16px; /* Bordas arredondadas são mais amigáveis */
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1); /* Sombra suave para dar profundidade */
-    border: 2px solid #e1e4e8; /* Borda sólida para delimitar bem a área */
+    padding: 2rem;
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    border: 2px solid #e1e4e8;
     margin-bottom: 2rem;
+    
+    /* Transição suave para hover */
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Títulos que conversam */
+.card:hover {
+    transform: translateY(-2px); /* Levanta levemente */
+    box-shadow: 0 6px 15px rgba(0,0,0,0.15);
+}
+
+/* Títulos */
 h2 {
     color: var(--azul-acao);
     margin-top: 0;
@@ -60,38 +84,34 @@ h2 {
     margin-bottom: 25px;
 }
 
-/* --- FORMULÁRIOS INCLUSIVOS --- */
-
+/* --- FORMULÁRIOS --- */
 form label {
     display: block;
     margin-top: 25px;
     margin-bottom: 8px;
     font-weight: bold;
     color: #333;
-    cursor: pointer; /* Ajuda a saber que clica */
+    cursor: pointer;
 }
 
-/* Onde o usuário digita */
 input, select {
     width: 100%;
-    min-height: var(--espaco-toque); /* Altura de 60px garantida */
+    min-height: var(--espaco-toque);
     padding: 10px 15px;
-    font-size: 1.2rem; /* Texto grande digitado */
-    border: 2px solid #ccc; /* Borda grossa para ver bem os limites */
+    font-size: 1.2rem;
+    border: 2px solid #ccc;
     border-radius: 8px;
     background-color: #fff;
     color: #000;
 }
 
-/* Quando o usuário clica no campo */
 input:focus, select:focus {
     outline: none;
     border-color: var(--azul-acao);
-    box-shadow: 0 0 0 4px var(--azul-foco); /* "Brilho" externo para destacar */
+    box-shadow: 0 0 0 4px var(--azul-foco);
     background-color: #f8fbff;
 }
 
-/* Instruções de apoio (letras miúdas, mas nem tanto) */
 .ajuda-campo {
     display: block;
     font-size: 0.9rem;
@@ -100,41 +120,40 @@ input:focus, select:focus {
     font-style: italic;
 }
 
-/* --- BOTÕES QUE PARECEM BOTÕES --- */
-
+/* --- BOTÕES --- */
 button {
     width: 100%;
     min-height: var(--espaco-toque);
     margin-top: 30px;
-    background-color: var(--azul-acao);
+    background-color: var(--verde-nutrane); 
     color: white;
     font-size: 1.3rem;
     font-weight: bold;
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    box-shadow: 0 4px 0 #003d80; /* "Sombra dura" que cria relevo 3D */
-    transition: transform 0.1s;
+    box-shadow: 0 4px 0 #087f40; 
+    transition: transform 0.1s, background-color 0.2s;
 }
 
 button:active {
-    transform: translateY(4px); /* Afunda quando clica */
+    transform: translateY(4px);
     box-shadow: none;
 }
 
 button:hover {
-    background-color: #004494;
+    background-color: #098e47; 
 }
 
-/* Links importantes */
+/* Links */
 a {
     color: var(--azul-acao);
-    text-decoration: underline; /* Sempre sublinhado para indicar link */
+    text-decoration: underline;
     text-underline-offset: 4px;
     font-weight: bold;
 }
 
-/* Mensagens de Feedback (O sistema falando com o usuário) */
+/* Feedback */
 .flash {
     padding: 20px;
     margin-bottom: 25px;
@@ -142,27 +161,24 @@ a {
     font-weight: bold;
     display: flex;
     align-items: center;
-    border-left: 8px solid transparent; /* Tarja colorida lateral */
-}
-
-/* Mensagem de Erro (Geralmente a única usada no flash padrão) */
-.flash {
     background-color: #fdeded;
     color: #5f2120;
-    border-left-color: var(--vermelho-erro);
+    border-left: 8px solid var(--vermelho-erro);
 }
-/* --- NAVEGAÇÃO ACESSÍVEL --- */
+
+/* --- NAVEGAÇÃO --- */
 nav {
-    background-color: #2c3e50;
+    background: linear-gradient(90deg, var(--azul-oceano) 0%, var(--verde-nutrane) 100%);
     padding: 1rem 0;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    color: white;
 }
 
 .nav-container {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-wrap: wrap; /* Permite quebrar linha no celular */
+    flex-wrap: wrap;
     gap: 15px;
 }
 
@@ -185,10 +201,10 @@ nav {
     color: white;
     text-decoration: none;
     padding: 10px 15px;
-    border-radius: 8px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
-    gap: 8px; /* Espaço entre ícone e texto */
+    gap: 8px;
     font-weight: 500;
     transition: background 0.2s;
 }
@@ -198,18 +214,61 @@ nav {
     text-decoration: none;
 }
 
-/* Botão de destaque no menu */
 .nav-item.destaque {
-    background-color: var(--azul-acao);
-    border: 2px solid rgba(255,255,255,0.2);
+    background-color: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.6);
 }
 
 .nav-item.destaque:hover {
-    background-color: var(--azul-foco);
-    color: #000;
+    background-color: white;
+    color: var(--verde-nutrane);
 }
 
-/* Link de Sair */
 .nav-item.sair {
     color: #ffcccc;
+}
+
+.nav-item.sair:hover {
+    background-color: rgba(255, 0, 0, 0.1);
+}
+
+/* ==========================================================================
+   MELHORIAS VISUAIS (Loading e Animações)
+   ========================================================================== */
+
+/* 1. Keyframes para Fade In Suave (Apenas Opacidade) */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* 2. Tela de Carregamento (Overlay) */
+#loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    /* Fundo sólido/translúcido para esconder a página antiga enquanto processa o formulário */
+    background: rgba(255, 255, 255, 0.9); 
+    z-index: 9999;
+    display: none; /* Controlado via JS no base.html */
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+/* Spinner Giratório */
+.spinner {
+    width: 60px;
+    height: 60px;
+    border: 6px solid #e1e4e8;
+    border-top: 6px solid var(--verde-nutrane);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }

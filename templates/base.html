@@ -9,6 +9,11 @@
 </head>
 <body>
 
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <p style="margin-top: 15px; color: #333; font-weight: bold; font-family: sans-serif;">Processando...</p>
+    </div>
+
     <nav>
         <div class="container nav-container">
             <div class="brand">
@@ -21,6 +26,11 @@
                     <a href="{{ url_for('dashboard') }}" class="nav-item">
                         <span class="material-icons">dashboard</span>
                         <span>Início</span>
+                    </a>
+                    
+                    <a href="{{ url_for('performance') }}" class="nav-item" style="background-color: #8e44ad;">
+                        <span class="material-icons">insights</span>
+                        <span>Performance</span>
                     </a>
                     
                     <a href="{{ url_for('nova_compra') }}" class="nav-item destaque">
@@ -76,24 +86,45 @@
     </div>
 
     <script>
-        // Função universal para mostrar o modal
+        // --- LÓGICA DO MODAL DE EXCLUSÃO ---
         function mostrarModal(url, tipo = 'pedido') {
             document.getElementById('confirmLink').href = url;
-            
             if (tipo === 'anexo') {
                 document.getElementById('modalMessage').innerHTML = 'Tem certeza que deseja APAGAR o ANEXO? Ele será removido permanentemente.';
             } else {
                 document.getElementById('modalMessage').innerHTML = 'Tem certeza que deseja APAGAR este PEDIDO inteiro? Esta ação não pode ser desfeita.';
             }
-            
             document.getElementById('confirmModal').style.display = 'flex';
-            document.getElementById('cancelButton').focus(); // Foca no Cancelar para prevenir clique acidental
+            document.getElementById('cancelButton').focus(); 
             return false;
         }
-        
         function esconderModal() {
             document.getElementById('confirmModal').style.display = 'none';
         }
+
+        // --- LÓGICA DE TRANSIÇÃO E LOADING (NOVO) ---
+        document.addEventListener("DOMContentLoaded", function() {
+            const loader = document.getElementById('loading-overlay');
+
+            // 1. Mostrar loading SOMENTE ao enviar formulários (Salvar, Filtrar, Importar)
+            // Isso evita o "piscar" na navegação normal pelos menus
+            document.querySelectorAll('form').forEach(form => {
+                form.addEventListener('submit', function() {
+                    // Não mostra se o formulário abrir em nova aba (target="_blank")
+                    if (!this.target) {
+                        loader.style.display = 'flex';
+                    }
+                });
+            });
+
+            // 2. Ocultar loading se o usuário voltar a página (botão voltar do navegador)
+            // (Correção para cache de página bfcache)
+            window.addEventListener('pageshow', function(event) {
+                if (event.persisted) {
+                    loader.style.display = 'none';
+                }
+            });
+        });
     </script>
 </body>
 </html>

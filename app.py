@@ -1,7 +1,8 @@
 import os
 import math
 import json
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from io import BytesIO
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
 import pymysql
 import pymysql.cursors
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -11,8 +12,9 @@ from collections import defaultdict
 import pdfplumber
 import re
 from dotenv import load_dotenv
+from xhtml2pdf import pisa 
 
-# Carrega as variáveis do arquivo .env
+# 1. CARREGA AS VARIÁVEIS DE AMBIENTE
 load_dotenv()
 
 app = Flask(__name__)
@@ -23,18 +25,21 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Configurações do Banco (Lidas do .env)
+# 2. CONFIGURAÇÕES DO BANCO
 DB_HOST = os.getenv('DB_HOST')
 DB_USER = os.getenv('DB_USER')
 DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_NAME = os.getenv('DB_NAME')
 DB_PORT = int(os.getenv('DB_PORT', 3306))
 
+# --- FUNÇÕES AUXILIARES ---
+
 def allowed_file(filename):
+    """Verifica se a extensão do arquivo é permitida"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_db_connection():
-    """Conecta usando PyMySQL"""
+    """Estabelece conexão com o MariaDB usando PyMySQL"""
     try:
         if not DB_HOST or not DB_USER:
             print("❌ ERRO CRÍTICO: Variáveis do .env não encontradas!")
@@ -46,6 +51,7 @@ def get_db_connection():
             password=DB_PASSWORD,
             database=DB_NAME,
             port=DB_PORT,
+            charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor,
             autocommit=True
         )
@@ -55,12 +61,14 @@ def get_db_connection():
         return None
 
 def salvar_anexos_multiplos(conn, pedido_id, files):
+    """Salva arquivos na pasta e registra no banco de dados"""
     cursor = conn.cursor()
     for arq in files:
         if arq and allowed_file(arq.filename) and arq.filename != '':
             nome_original = arq.filename
             nome_seguro = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{nome_original}")
-            arq.save(os.path.join(app.config['UPLOAD_FOLDER'], nome_seguro))
+            caminho_completo = os.path.join(app.config['UPLOAD_FOLDER'], nome_seguro)
+            arq.save(caminho_completo)
             
             cursor.execute('''
                 INSERT INTO pedidos_anexos (pedido_id, nome_arquivo, nome_original) 
@@ -68,15 +76,17 @@ def salvar_anexos_multiplos(conn, pedido_id, files):
             ''', (pedido_id, nome_seguro, nome_original))
     cursor.close()
 
-# --- FUNÇÃO AUXILIAR PARA CONVERTER VALOR R$ ---
 def safe_float(valor_str):
-    """Converte string de dinheiro ou vazio para float seguro"""
-    if not valor_str: return 0.0
+    """Converte string de moeda para float de forma segura"""
+    if not valor_str: 
+        return 0.0
     try:
-        # Se vier com vírgula (formato BR), troca por ponto
-        return float(valor_str.replace(',', '.'))
+        limpo = str(valor_str).replace('.', '').replace(',', '.')
+        return float(limpo)
     except:
         return 0.0
+
+# --- ROTAS DE AUTENTICAÇÃO ---
 
 @app.route('/', methods=['GET', 'POST'])
 def login():
@@ -98,7 +108,7 @@ def login():
                 session['user_nivel'] = user['nivel_acesso']
                 return redirect(url_for('dashboard'))
         else:
-            flash('Erro de conexão com o banco de dados.')
+            flash('Erro de conexão com o banco.')
         
         flash('Login inválido ou pendente.')
     return render_template('login.html')
@@ -109,10 +119,6 @@ def registro():
         nome = request.form['nome']
         email = request.form['email']
         senha = request.form['senha']
-        
-        if len(senha) < 6:
-            flash('Senha curta.')
-            return redirect(url_for('registro'))
         
         try:
             conn = get_db_connection()
@@ -125,13 +131,20 @@ def registro():
                 flash('Aguarde aprovação.')
                 return redirect(url_for('login'))
         except Exception as e:
-            print(f"Erro registro: {e}")
-            flash('Email já existe ou erro no banco.')
+            flash('Email já existe.')
     return render_template('registro.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+# --- ROTAS PRINCIPAIS ---
 
 @app.route('/dashboard')
 def dashboard():
-    if 'user_id' not in session: return redirect(url_for('login'))
+    if 'user_id' not in session: 
+        return redirect(url_for('login'))
     
     if request.args.get('limpar'):
         session.pop('filtros_memoria', None)
@@ -144,7 +157,8 @@ def dashboard():
         return redirect(url_for('dashboard', **session['filtros_memoria']))
 
     conn = get_db_connection()
-    if not conn: return "Erro de conexão com o Banco"
+    if not conn: 
+        return "Erro Banco"
 
     busca = request.args.get('busca', '')
     f_solicitacao = request.args.get('f_solicitacao', '')
@@ -205,35 +219,20 @@ def dashboard():
     total_registros = cursor.fetchone()['total']
     total_paginas = math.ceil(total_registros / itens_por_pagina)
     
-    sql_tabela = f'''
-        SELECT c.*, e.nome_empresa, u2.nome_completo as nome_comprador 
-        {sql_joins} {where_clause} 
-        ORDER BY c.id DESC LIMIT %s OFFSET %s
-    '''
-    cursor.execute(sql_tabela, params + [itens_por_pagina, offset])
+    cursor.execute(f'SELECT c.*, e.nome_empresa, u2.nome_completo as nome_comprador {sql_joins} {where_clause} ORDER BY c.id DESC LIMIT %s OFFSET %s', params + [itens_por_pagina, offset])
     pedidos = cursor.fetchall()
 
-    sql_status = f"SELECT c.status_compra, COUNT(*) as qtd {sql_joins} {where_clause} GROUP BY c.status_compra"
-    cursor.execute(sql_status, params)
+    cursor.execute(f"SELECT c.status_compra, COUNT(*) as qtd {sql_joins} {where_clause} GROUP BY c.status_compra", params)
     dados_status = cursor.fetchall()
-    labels_status = [r['status_compra'] for r in dados_status]
-    values_status = [r['qtd'] for r in dados_status]
-
+    
     where_forn = where_clause + " AND " if where_clause else "WHERE "
-    sql_forn = f"SELECT c.fornecedor, COUNT(*) as qtd {sql_joins} {where_forn} c.status_compra NOT LIKE '%%Entregue%%' GROUP BY c.fornecedor ORDER BY qtd DESC LIMIT 5"
-    cursor.execute(sql_forn, params)
+    cursor.execute(f"SELECT c.fornecedor, COUNT(*) as qtd {sql_joins} {where_forn} c.status_compra NOT LIKE '%%Entregue%%' GROUP BY c.fornecedor ORDER BY qtd DESC LIMIT 5", params)
     dados_forn = cursor.fetchall()
-    labels_forn = [r['fornecedor'] for r in dados_forn]
-    values_forn = [r['qtd'] for r in dados_forn]
-
-    sql_comp = f"SELECT u2.nome_completo, COUNT(*) as qtd {sql_joins} {where_forn} c.status_compra NOT LIKE '%%Entregue%%' GROUP BY u2.nome_completo"
-    cursor.execute(sql_comp, params)
+    
+    cursor.execute(f"SELECT u2.nome_completo, COUNT(*) as qtd {sql_joins} {where_forn} c.status_compra NOT LIKE '%%Entregue%%' GROUP BY u2.nome_completo", params)
     dados_comp = cursor.fetchall()
-    labels_comp = [r['nome_completo'] if r['nome_completo'] else 'Sem Comprador' for r in dados_comp]
-    values_comp = [r['qtd'] for r in dados_comp]
 
-    sql_kpis = f"SELECT c.status_compra, c.prazo_entrega, c.data_entrega_reprogramada {sql_joins} {where_clause}"
-    cursor.execute(sql_kpis, params)
+    cursor.execute(f"SELECT c.status_compra, c.prazo_entrega, c.data_entrega_reprogramada {sql_joins} {where_clause}", params)
     all_orders = cursor.fetchall()
 
     cursor.execute("SELECT * FROM empresas_compras ORDER BY nome_empresa")
@@ -254,63 +253,229 @@ def dashboard():
             dt_val = r['data_entrega_reprogramada'] or r['prazo_entrega']
             if dt_val:
                 try:
-                    if isinstance(dt_val, str): dt_obj = datetime.strptime(dt_val, '%Y-%m-%d').date()
-                    else: dt_obj = dt_val
+                    if isinstance(dt_val, str):
+                        dt_obj = datetime.strptime(dt_val, '%Y-%m-%d').date()
+                    else:
+                        dt_obj = dt_val
                     
-                    if (dt_obj - hoje).days <= 0: kpis['atrasados'] += 1
+                    if (dt_obj - hoje).days <= 0:
+                        kpis['atrasados'] += 1
                     start_week = dt_obj - timedelta(days=dt_obj.weekday())
                     timeline_data[start_week] += 1
-                except: pass
+                except:
+                    pass
 
     sorted_dates = sorted(timeline_data.keys())
-    labels_timeline = [d.strftime('%d/%m') for d in sorted_dates]
-    values_timeline = [timeline_data[d] for d in sorted_dates]
-    lista_status = ["Aguardando Aprovação", "Orçamento", "Confirmado", "Em Trânsito", "Entregue Parcialmente", "Entregue Totalmente"]
-
+    
     for p in pedidos:
         s = p['status_compra']
-        if s == 'Aguardando Aprovação': p.update({'cor_s': '#9b59b6', 'txt_s': 'ORÇAMENTO'})
-        elif s in ['Confirmado', 'Orçamento', 'Em Trânsito']: p.update({'cor_s': '#3498db', 'txt_s': 'COMPRADO'})
-        elif 'Entregue' in s: p.update({'cor_s': '#2ecc71', 'txt_s': 'ENTREGUE'})
-        else: p.update({'cor_s': '#95a5a6', 'txt_s': s})
+        if s == 'Aguardando Aprovação':
+            p.update({'cor_s': '#9b59b6', 'txt_s': 'ORÇAMENTO'})
+        elif s in ['Confirmado', 'Orçamento', 'Em Trânsito']:
+            p.update({'cor_s': '#3498db', 'txt_s': 'COMPRADO'})
+        elif 'Entregue' in s:
+            p.update({'cor_s': '#2ecc71', 'txt_s': 'ENTREGUE'})
+        else:
+            p.update({'cor_s': '#95a5a6', 'txt_s': s})
 
         dt_val = p['data_entrega_reprogramada'] or p['prazo_entrega']
         p_dt_obj = None
         if dt_val:
-            if isinstance(dt_val, str): p_dt_obj = datetime.strptime(dt_val, '%Y-%m-%d').date()
-            else: p_dt_obj = dt_val
+            if isinstance(dt_val, str):
+                p_dt_obj = datetime.strptime(dt_val, '%Y-%m-%d').date()
+            else:
+                p_dt_obj = dt_val
 
         if p_dt_obj and 'Entregue' not in s:
             dias = (p_dt_obj - hoje).days
-            if dias <= 0: p.update({'cor_p': '#e74c3c', 'txt_p': 'ATRASADO', 'cor_s': '#e74c3c', 'txt_s': 'ATRASADO'})
-            elif dias <= 2: p.update({'cor_p': '#f1c40f', 'txt_p': 'ATENÇÃO'})
-            else: p.update({'cor_p': '#2ecc71', 'txt_p': 'NO PRAZO'})
-        else: p.update({'cor_p': 'transparent', 'txt_p': '-'})
+            if dias <= 0:
+                p.update({'cor_p': '#e74c3c', 'txt_p': 'ATRASADO'})
+            elif dias <= 2:
+                p.update({'cor_p': '#f1c40f', 'txt_p': 'ATENÇÃO'})
+            else:
+                p.update({'cor_p': '#2ecc71', 'txt_p': 'NO PRAZO'})
+        else:
+            p.update({'cor_p': 'transparent', 'txt_p': '-'})
         
         if p['prazo_entrega']: 
-            if isinstance(p['prazo_entrega'], str): p['prazo_entrega'] = datetime.strptime(p['prazo_entrega'], '%Y-%m-%d').strftime('%d/%m/%Y')
-            else: p['prazo_entrega'] = p['prazo_entrega'].strftime('%d/%m/%Y')
-
+            if not isinstance(p['prazo_entrega'], str):
+                p['prazo_entrega'] = p['prazo_entrega'].strftime('%d/%m/%Y')
         if p['data_entrega_reprogramada']:
-            if isinstance(p['data_entrega_reprogramada'], str): p['data_entrega_reprogramada'] = datetime.strptime(p['data_entrega_reprogramada'], '%Y-%m-%d').strftime('%d/%m/%Y')
-            else: p['data_entrega_reprogramada'] = p['data_entrega_reprogramada'].strftime('%d/%m/%Y')
+            if not isinstance(p['data_entrega_reprogramada'], str):
+                p['data_entrega_reprogramada'] = p['data_entrega_reprogramada'].strftime('%d/%m/%Y')
 
     return render_template('dashboard.html', pedidos=pedidos, pagina=pagina, total_paginas=total_paginas,
                            busca=busca, f_solicitacao=f_solicitacao, f_empresa=f_empresa, f_comprador=f_comprador, f_status=f_status,
                            f_data_inicio=f_data_inicio, f_data_fim=f_data_fim,
-                           lista_empresas=lista_empresas, lista_compradores=lista_compradores, lista_status=lista_status,
+                           lista_empresas=lista_empresas, lista_compradores=lista_compradores, 
+                           lista_status=["Aguardando Aprovação", "Orçamento", "Confirmado", "Em Trânsito", "Entregue Parcialmente", "Entregue Totalmente"],
                            kpis=kpis,
-                           graf_status={'labels': labels_status, 'values': values_status},
-                           graf_forn={'labels': labels_forn, 'values': values_forn},
-                           graf_comp={'labels': labels_comp, 'values': values_comp},
-                           graf_timeline={'labels': labels_timeline, 'values': values_timeline})
+                           graf_status={'labels': [r['status_compra'] for r in dados_status], 'values': [r['qtd'] for r in dados_status]},
+                           graf_forn={'labels': [r['fornecedor'] for r in dados_forn], 'values': [r['qtd'] for r in dados_forn]},
+                           graf_comp={'labels': [r['nome_completo'] or 'Sem' for r in dados_comp], 'values': [r['qtd'] for r in dados_comp]},
+                           graf_timeline={'labels': [d.strftime('%d/%m') for d in sorted_dates], 'values': [timeline_data[d] for d in sorted_dates]})
+
+# --- ROTA DE PERFORMANCE ---
+@app.route('/performance')
+def performance():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_db_connection()
+    if not conn:
+        return "Erro Banco"
+    cursor = conn.cursor()
+
+    # 1. Lead Time Médio (CORRIGIDO: Agora usa data_registro como início)
+    cursor.execute("""
+        SELECT AVG(DATEDIFF(data_entrega_real, data_registro)) as media 
+        FROM acompanhamento_compras 
+        WHERE data_entrega_real IS NOT NULL AND data_registro IS NOT NULL
+    """)
+    res_lead = cursor.fetchone()
+    lead_time = res_lead['media'] if res_lead and res_lead['media'] else 0
+
+    # 2. OTIF
+    cursor.execute("""
+        SELECT 
+            COUNT(*) as total,
+            SUM(CASE WHEN entrega_conforme = 1 THEN 1 ELSE 0 END) as perfeitas,
+            SUM(CASE WHEN entrega_conforme = 0 THEN 1 ELSE 0 END) as problemas
+        FROM acompanhamento_compras 
+        WHERE status_compra LIKE '%%Entregue%%'
+    """)
+    dados_otif = cursor.fetchone()
+    
+    total_entregue = dados_otif['total'] if dados_otif and dados_otif['total'] else 1 
+    perfeitas = dados_otif['perfeitas'] if dados_otif and dados_otif['perfeitas'] else 0
+    problemas = dados_otif['problemas'] if dados_otif and dados_otif['problemas'] else 0
+    
+    pct_otif = round((perfeitas / total_entregue) * 100, 1) if total_entregue > 0 else 0
+    nao_avaliados = total_entregue - perfeitas - problemas
+    if nao_avaliados < 0:
+        nao_avaliados = 0
+
+    # 3. Backlog Financeiro
+    cursor.execute("""
+        SELECT SUM(i.quantidade * i.valor_unitario) as total_money
+        FROM pedidos_itens i
+        JOIN acompanhamento_compras c ON i.pedido_id = c.id
+        WHERE c.status_compra NOT LIKE '%%Entregue%%'
+    """)
+    res_backlog = cursor.fetchone()
+    backlog_val = res_backlog['total_money'] if res_backlog and res_backlog['total_money'] else 0.0
+    backlog_fmt = "{:,.2f}".format(backlog_val).replace(',', 'X').replace('.', ',').replace('X', '.')
+
+    # 4. Atraso por Unidade
+    cursor.execute("""
+        SELECT 
+            e.nome_empresa,
+            COUNT(*) as total_pedidos,
+            SUM(CASE WHEN c.prazo_entrega < CURDATE() AND c.status_compra NOT LIKE '%%Entregue%%' THEN 1 ELSE 0 END) as atrasados
+        FROM acompanhamento_compras c
+        JOIN empresas_compras e ON c.codi_empresa = e.codi_empresa
+        GROUP BY e.nome_empresa
+        HAVING total_pedidos > 0
+        ORDER BY atrasados DESC
+    """)
+    unidades = cursor.fetchall()
+    labels_atraso = []
+    values_atraso = []
+    for u in unidades:
+        taxa = (u['atrasados'] / u['total_pedidos']) * 100
+        labels_atraso.append(u['nome_empresa'])
+        values_atraso.append(round(taxa, 1))
+
+    # 5. Falhas Recentes
+    cursor.execute("""
+        SELECT id, fornecedor, data_entrega_real, detalhes_entrega 
+        FROM acompanhamento_compras 
+        WHERE entrega_conforme = 0 
+        ORDER BY data_entrega_real DESC LIMIT 10
+    """)
+    falhas = cursor.fetchall()
+    
+    cursor.close()
+    conn.close()
+
+    return render_template('performance.html',
+                           kpis={'lead_time': round(lead_time), 'otif': pct_otif, 'backlog': backlog_fmt},
+                           graf_atraso={'labels': labels_atraso, 'dados': values_atraso}, 
+                           graf_qualidade=[perfeitas, problemas, nao_avaliados],
+                           falhas=falhas)
+
+# --- ROTA GERADORA DE PDF ---
+@app.route('/download_performance_pdf')
+def download_performance_pdf():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    if not conn:
+        return "Erro Banco"
+    cursor = conn.cursor()
+
+    # 1. KPIs Gerais (CORRIGIDO TAMBÉM: DATEDIFF(data_entrega_real, data_registro))
+    cursor.execute("SELECT AVG(DATEDIFF(data_entrega_real, data_registro)) as lead_time FROM acompanhamento_compras WHERE data_entrega_real IS NOT NULL")
+    res_lead = cursor.fetchone()
+    lead_time = round(res_lead['lead_time'] or 0)
+
+    cursor.execute("SELECT COUNT(*) as total, SUM(CASE WHEN entrega_conforme = 1 THEN 1 ELSE 0 END) as perfeitas FROM acompanhamento_compras WHERE status_compra LIKE '%%Entregue%%'")
+    d_otif = cursor.fetchone()
+    total_otif = d_otif['total'] or 1
+    otif = round((d_otif['perfeitas'] or 0) / total_otif * 100, 1)
+
+    # 2. Lista Detalhada de Entregas (Com Valor)
+    cursor.execute("""
+        SELECT 
+            c.id, e.nome_empresa, c.fornecedor, c.data_compra, c.prazo_entrega, c.data_entrega_real, c.entrega_conforme, c.detalhes_entrega,
+            (SELECT COALESCE(SUM(i.quantidade * i.valor_unitario), 0) FROM pedidos_itens i WHERE i.pedido_id = c.id) as valor_total
+        FROM acompanhamento_compras c
+        JOIN empresas_compras e ON c.codi_empresa = e.codi_empresa
+        WHERE c.status_compra LIKE '%%Entregue%%'
+        ORDER BY c.data_entrega_real DESC
+    """)
+    entregas = cursor.fetchall()
+
+    # 3. Lista Detalhada de Atrasos (Com Valor)
+    cursor.execute("""
+        SELECT 
+            c.id, e.nome_empresa, c.fornecedor, c.prazo_entrega, DATEDIFF(CURDATE(), c.prazo_entrega) as dias_atraso,
+            (SELECT COALESCE(SUM(i.quantidade * i.valor_unitario), 0) FROM pedidos_itens i WHERE i.pedido_id = c.id) as valor_total
+        FROM acompanhamento_compras c
+        JOIN empresas_compras e ON c.codi_empresa = e.codi_empresa
+        WHERE c.prazo_entrega < CURDATE() AND c.status_compra NOT LIKE '%%Entregue%%'
+        ORDER BY dias_atraso DESC
+    """)
+    atrasos = cursor.fetchall()
+    
+    cursor.close()
+    conn.close()
+
+    html = render_template('pdf_relatorio.html', 
+                           kpis={'lead_time': lead_time, 'otif': otif},
+                           entregas=entregas, 
+                           atrasos=atrasos, 
+                           hoje=date.today().strftime('%d/%m/%Y'))
+    
+    pdf_io = BytesIO()
+    pisa_status = pisa.CreatePDF(html, dest=pdf_io)
+    
+    if pisa_status.err:
+        return "Erro ao gerar PDF", 500
+    
+    pdf_io.seek(0)
+    return send_file(pdf_io, download_name=f"Relatorio_Performance_{date.today()}.pdf", as_attachment=True)
+
+# --- ROTAS DE CADASTRO E EDIÇÃO ---
 
 @app.route('/nova_compra', methods=['GET', 'POST'])
 def nova_compra():
-    if 'user_id' not in session: return redirect(url_for('login'))
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
     
     conn = get_db_connection()
-    if not conn: return "Erro de Banco"
+    if not conn:
+        return "Erro de Banco"
     cursor = conn.cursor()
     
     cursor.execute('SELECT * FROM empresas_compras')
@@ -322,75 +487,42 @@ def nova_compra():
     
     if request.method == 'POST':
         f = request.form
-        dados_form = f
-        erros = []
+        names = f.getlist('nome_item[]')
+        title = names[0] if names else "Pedido"
+        if len(names) > 1: 
+            title += f" (+ {len(names)-1} itens)"
         
-        nomes_itens = f.getlist('nome_item[]')
-        qtds_itens = f.getlist('qtd[]')
-        # NOVO: Captura os valores
-        valores_itens = f.getlist('valor[]') 
-        
-        if not nomes_itens or not nomes_itens[0]:
-            erros.append("O item a ser comprado é obrigatório.")
-        if not f.get('fornecedor'): erros.append("O Fornecedor é obrigatório.")
-        if not f.get('solicitacao'): erros.append("O Número da Solicitação é obrigatório.")
-        if not f.get('empresa'): erros.append("A Unidade solicitante é obrigatória.")
-        
-        data_compra_str = f.get('data_compra')
-        hoje = date.today()
-        
-        if data_compra_str:
-            try:
-                dt_obj = datetime.strptime(data_compra_str, '%Y-%m-%d').date()
-                if dt_obj > hoje: erros.append("Data da Compra não pode ser futura.")
-            except: erros.append("Data da Compra inválida.")
-            
-        if erros:
-            for erro in erros: flash(f'🚨 {erro}')
-            cursor.close()
-            conn.close()
-            return render_template('nova_compra.html', empresas=empresas, usuarios=usuarios, dados_form=dados_form)
-
-        item_titulo = nomes_itens[0]
-        if len(nomes_itens) > 1:
-            item_titulo += f" (+ {len(nomes_itens)-1} itens)"
-
+        # --- ALTERAÇÃO AQUI: INSERE A DATA DO INPUT NO BANCO ---
         cursor.execute('''
-            INSERT INTO acompanhamento_compras (
-                numero_solicitacao, numero_orcamento, numero_pedido, item_comprado, categoria, 
-                fornecedor, data_compra, nota_fiscal, serie_nota, 
-                observacao, codi_empresa, id_responsavel_chamado, id_comprador_responsavel, 
-                prazo_entrega, status_compra, solicitante_real
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            INSERT INTO acompanhamento_compras 
+            (data_registro, data_abertura, numero_solicitacao, numero_orcamento, numero_pedido, item_comprado, categoria, 
+             fornecedor, data_compra, nota_fiscal, serie_nota, observacao, codi_empresa, 
+             id_responsavel_chamado, id_comprador_responsavel, prazo_entrega, status_compra, solicitante_real) 
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         ''', (
-            f.get('solicitacao'), f.get('orcamento'), f.get('pedido'), item_titulo, f.get('categoria'), 
+            f.get('data_registro'), # Pega do Input da Tela
+            f.get('requisicao'), f.get('solicitacao'), f.get('orcamento'), f.get('pedido'), title, f.get('categoria'), 
             f.get('fornecedor'), f.get('data_compra') or None, f.get('nota'), f.get('serie'), 
-            f.get('observacao'), f.get('empresa'), f.get('resp_chamado') or None, f.get('resp_comprador') or None, 
-            f.get('prazo') or None, f.get('status'), f.get('solicitante_real')
+            f.get('observacao'), f.get('empresa'), f.get('resp_chamado') or None, 
+            f.get('resp_comprador') or None, f.get('prazo') or None, f.get('status'), f.get('solicitante_real')
         ))
-
+        
         pedido_id = cursor.lastrowid
         
-        unidades = f.getlist('unidade[]')
-        for i in range(len(nomes_itens)):
-            nome = nomes_itens[i]
-            qtd = qtds_itens[i] if i < len(qtds_itens) else 1
-            unid = unidades[i] if i < len(unidades) else 'UN'
-            
-            # NOVO: Pega o valor correspondente (ou 0.0 se não tiver)
-            val = safe_float(valores_itens[i]) if i < len(valores_itens) else 0.0
-            
-            if nome.strip():
-                # ADICIONADO: valor_unitario no INSERT
-                cursor.execute('''INSERT INTO pedidos_itens 
-                    (pedido_id, nome_item, quantidade, unidade_medida, valor_unitario) 
-                    VALUES (%s, %s, %s, %s, %s)''', 
-                    (pedido_id, nome, qtd, unid, val))
-
-        conn.commit() 
+        nomes = f.getlist('nome_item[]')
+        qtds = f.getlist('qtd[]')
+        unids = f.getlist('unidade[]')
+        valores = f.getlist('valor[]') 
         
-        files = request.files.getlist('arquivo')
-        salvar_anexos_multiplos(conn, pedido_id, files)
+        for i in range(len(nomes)):
+            if nomes[i].strip():
+                val = safe_float(valores[i]) if i < len(valores) else 0.0
+                cursor.execute('''
+                    INSERT INTO pedidos_itens (pedido_id, nome_item, quantidade, unidade_medida, valor_unitario) 
+                    VALUES (%s, %s, %s, %s, %s)
+                ''', (pedido_id, nomes[i], qtds[i], unids[i], val))
+        
+        salvar_anexos_multiplos(conn, pedido_id, request.files.getlist('arquivo'))
         
         cursor.close()
         conn.close()
@@ -403,92 +535,76 @@ def nova_compra():
 
 @app.route('/editar_pedido/<int:id>', methods=['GET', 'POST'])
 def editar_pedido(id):
-    if 'user_id' not in session: return redirect(url_for('login'))
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
     conn = get_db_connection()
-    if not conn: return "Erro de Banco"
     cursor = conn.cursor()
     
     cursor.execute('SELECT * FROM acompanhamento_compras WHERE id = %s', (id,))
     pedido = cursor.fetchone()
-    
     cursor.execute('SELECT * FROM usuarios WHERE aprovado = 1 ORDER BY nome_completo')
     usuarios = cursor.fetchall()
     
     if request.method == 'POST':
         f = request.form
         
-        nomes_itens = f.getlist('nome_item[]')
-        novo_titulo = pedido['item_comprado']
-        if nomes_itens:
-            novo_titulo = nomes_itens[0]
-            if len(nomes_itens) > 1:
-                novo_titulo += f" (+ {len(nomes_itens)-1} itens)"
+        names = f.getlist('nome_item[]')
+        title = names[0] if names else "Pedido"
+        if len(names) > 1: 
+            title += f" (+ {len(names)-1} itens)"
         
-        # TRATAMENTO DOS NOVOS CAMPOS DE ENTREGA (Boolean e Data)
         ent_conf = f.get('entrega_conforme')
         if ent_conf == '1': ent_conf = 1
         elif ent_conf == '0': ent_conf = 0
-        else: ent_conf = None # Se vazio
+        else: ent_conf = None
 
-        # UPDATE PRINCIPAL
-        cursor.execute('''UPDATE acompanhamento_compras SET 
-            numero_solicitacao=%s, numero_orcamento=%s, numero_pedido=%s, item_comprado=%s, categoria=%s, 
-            fornecedor=%s, data_compra=%s, prazo_entrega=%s, data_entrega_reprogramada=%s, 
+        # --- ALTERAÇÃO AQUI: ATUALIZA A DATA_REGISTRO SE EDITADA ---
+        cursor.execute('''
+            UPDATE acompanhamento_compras SET 
+            data_registro=%s, data_abertura=%s, numero_solicitacao=%s, numero_orcamento=%s, numero_pedido=%s, item_comprado=%s, 
+            categoria=%s, fornecedor=%s, data_compra=%s, prazo_entrega=%s, data_entrega_reprogramada=%s, 
             nota_fiscal=%s, serie_nota=%s, status_compra=%s, observacao=%s, 
-            id_responsavel_chamado=%s, id_comprador_responsavel=%s, solicitante_real=%s,
-            data_entrega_real=%s, entrega_conforme=%s, detalhes_entrega=%s
-            WHERE id=%s''', 
-            (f['solicitacao'], f.get('orcamento'), f.get('pedido'), novo_titulo, f.get('categoria'), 
-             f['fornecedor'], f.get('data_compra') or None, f.get('prazo') or None, f.get('reprogramada') or None, 
-             f.get('nota'), f.get('serie'), f['status'], f.get('observacao'), 
-             f.get('resp_chamado') or None, f.get('resp_comprador') or None, 
-             f.get('solicitante_real'),
-             # Novos Campos
-             f.get('data_entrega_real') or None, 
-             ent_conf, 
-             f.get('detalhes_entrega'),
-             id))
+            id_responsavel_chamado=%s, id_comprador_responsavel=%s, solicitante_real=%s, 
+            data_entrega_real=%s, entrega_conforme=%s, detalhes_entrega=%s 
+            WHERE id=%s
+        ''', (
+            f.get('data_registro'), # Pega o novo valor da edição
+            f.get('requisicao'), f['solicitacao'], f.get('orcamento'), f.get('pedido'), title, 
+            f.get('categoria'), f['fornecedor'], f.get('data_compra') or None, 
+            f.get('prazo') or None, f.get('reprogramada') or None, 
+            f.get('nota'), f.get('serie'), f['status'], f.get('observacao'), 
+            f.get('resp_chamado') or None, f.get('resp_comprador') or None, 
+            f.get('solicitante_real'), 
+            f.get('data_entrega_real') or None, ent_conf, f.get('detalhes_entrega'), 
+            id
+        ))
         
-        ids_itens = f.getlist('item_id[]')
-        qtds_itens = f.getlist('qtd[]')
-        unidades = f.getlist('unidade[]')
-        valores_itens = f.getlist('valor[]') # Captura valores na edição
+        ids = f.getlist('item_id[]')
+        nomes = f.getlist('nome_item[]')
+        qtds = f.getlist('qtd[]')
+        unids = f.getlist('unidade[]')
+        vals = f.getlist('valor[]')
 
-        itens_para_remover = f.get('itens_para_remover')
-        if itens_para_remover:
-            lista_ids = itens_para_remover.split(',')
-            for id_rem in lista_ids:
-                if id_rem: cursor.execute('DELETE FROM pedidos_itens WHERE id = %s', (id_rem,))
+        if f.get('itens_para_remover'):
+            for rem_id in f.get('itens_para_remover').split(','):
+                if rem_id: cursor.execute('DELETE FROM pedidos_itens WHERE id=%s', (rem_id,))
         
-        for i in range(len(nomes_itens)):
-            item_id = ids_itens[i]
-            nome = nomes_itens[i]
-            qtd = qtds_itens[i]
-            unid = unidades[i]
-            val = safe_float(valores_itens[i]) if i < len(valores_itens) else 0.0
-
-            if nome.strip():
-                if item_id: 
-                    # UPDATE com Valor
+        for i in range(len(nomes)):
+            if nomes[i].strip():
+                val = safe_float(vals[i]) if i < len(vals) else 0.0
+                if ids[i]: 
                     cursor.execute('''UPDATE pedidos_itens 
                         SET nome_item=%s, quantidade=%s, unidade_medida=%s, valor_unitario=%s 
-                        WHERE id=%s''', 
-                        (nome, qtd, unid, val, item_id))
+                        WHERE id=%s''', (nomes[i], qtds[i], unids[i], val, ids[i]))
                 else: 
-                    # INSERT com Valor
                     cursor.execute('''INSERT INTO pedidos_itens 
                         (pedido_id, nome_item, quantidade, unidade_medida, valor_unitario) 
-                        VALUES (%s, %s, %s, %s, %s)''', 
-                        (id, nome, qtd, unid, val))
-
-        conn.commit()
+                        VALUES (%s, %s, %s, %s, %s)''', (id, nomes[i], qtds[i], unids[i], val))
         
-        files = request.files.getlist('arquivo')
-        salvar_anexos_multiplos(conn, id, files)
-        
+        salvar_anexos_multiplos(conn, id, request.files.getlist('arquivo'))
         cursor.close()
         conn.close()
-        flash('✅ Pedido alterado com sucesso!')
+        flash('✅ Atualizado com sucesso!')
         return redirect(url_for('dashboard'))
 
     cursor.execute('SELECT * FROM pedidos_itens WHERE pedido_id = %s', (id,))
@@ -510,34 +626,35 @@ def excluir_pedido(id):
     cursor.execute('SELECT nome_arquivo FROM pedidos_anexos WHERE pedido_id=%s',(id,))
     anexos = cursor.fetchall()
     for anexo in anexos:
-        try: os.remove(os.path.join(app.config['UPLOAD_FOLDER'], anexo['nome_arquivo']))
-        except: pass
+        try:
+            os.remove(os.path.join(app.config['UPLOAD_FOLDER'], anexo['nome_arquivo']))
+        except:
+            pass
         
     cursor.execute('DELETE FROM acompanhamento_compras WHERE id=%s',(id,))
-    conn.commit()
     cursor.close()
     conn.close()
-    flash('Excluído!'); return redirect(url_for('dashboard'))
+    flash('Excluído!')
+    return redirect(url_for('dashboard'))
 
 @app.route('/excluir_anexo/<int:anexo_id>')
 def excluir_anexo(anexo_id):
     if 'user_id' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
-    if not conn: return "Erro Banco"
     cursor = conn.cursor()
-    
     cursor.execute('SELECT pedido_id, nome_arquivo FROM pedidos_anexos WHERE id=%s',(anexo_id,))
     anexo = cursor.fetchone()
+    
     if anexo:
-        pedido_id = anexo['pedido_id']
-        try: os.remove(os.path.join(app.config['UPLOAD_FOLDER'], anexo['nome_arquivo']))
-        except: pass
+        try:
+            os.remove(os.path.join(app.config['UPLOAD_FOLDER'], anexo['nome_arquivo']))
+        except:
+            pass
         cursor.execute('DELETE FROM pedidos_anexos WHERE id=%s',(anexo_id,))
-        conn.commit()
         cursor.close()
         conn.close()
         flash('Anexo removido!')
-        return redirect(url_for('editar_pedido', id=pedido_id))
+        return redirect(url_for('editar_pedido', id=anexo['pedido_id']))
     
     cursor.close()
     conn.close()
@@ -547,18 +664,14 @@ def excluir_anexo(anexo_id):
 def ver_pedido(id):
     if 'user_id' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
-    if not conn: return "Erro Banco"
     cursor = conn.cursor()
     
     sql = '''
-        SELECT c.*, 
-               e.nome_empresa, 
-               u_solic.nome_completo as nome_solicitante,
-               u_comp.nome_completo as nome_comprador
-        FROM acompanhamento_compras c
-        LEFT JOIN empresas_compras e ON c.codi_empresa = e.codi_empresa
-        LEFT JOIN usuarios u_solic ON c.id_responsavel_chamado = u_solic.id
-        LEFT JOIN usuarios u_comp ON c.id_comprador_responsavel = u_comp.id
+        SELECT c.*, e.nome_empresa, u1.nome_completo as nome_solicitante, u2.nome_completo as nome_comprador 
+        FROM acompanhamento_compras c 
+        LEFT JOIN empresas_compras e ON c.codi_empresa = e.codi_empresa 
+        LEFT JOIN usuarios u1 ON c.id_responsavel_chamado = u1.id 
+        LEFT JOIN usuarios u2 ON c.id_comprador_responsavel = u2.id 
         WHERE c.id = %s
     '''
     cursor.execute(sql, (id,))
@@ -573,45 +686,40 @@ def ver_pedido(id):
     cursor.close()
     conn.close()
     
-    if not pedido:
-        flash('Pedido não encontrado.')
-        return redirect(url_for('dashboard'))
-
     return render_template('ver_pedido.html', pedido=pedido, itens=itens, anexos=anexos)
 
 @app.route('/importar_solicitacao', methods=['POST'])
 def importar_solicitacao():
-    if 'arquivo_pdf' not in request.files:
-        flash('Nenhum arquivo enviado.')
+    if 'arquivo_pdf' not in request.files or request.files['arquivo_pdf'].filename == '':
+        flash('Erro no arquivo.')
         return redirect(url_for('nova_compra'))
     
     file = request.files['arquivo_pdf']
-    if file.filename == '':
-        flash('Nenhum arquivo selecionado.')
-        return redirect(url_for('nova_compra'))
-
     dados_pdf = {}
     itens_pdf = []
-    lista_obs_global = []
+    lista_obs = [] # Essa lista existia, mas não estava sendo usada!
     unidades_conhecidas = ['UN', 'PC', 'CX', 'KG', 'M', 'L', 'LITRO', 'METRO', 'PAR', 'UN GERAL']
 
     try:
         with pdfplumber.open(file) as pdf:
-            page = pdf.pages[0]
-            texto_bruto = page.extract_text() or ""
+            text = pdf.pages[0].extract_text() or ""
             
-            match_solic = re.search(r'Solicitação de Compra:\s*(\d+)', texto_bruto)
-            if match_solic: dados_pdf['solicitacao'] = match_solic.group(1)
+            # 1. Captura Cabeçalhos (Solicitação, Data, Empresa)
+            if m := re.search(r'Solicitação de Compra:\s*(\d+)', text):
+                dados_pdf['solicitacao'] = m.group(1)
             
-            match_data = re.search(r'Data:\s*(\d{2}/\d{2}/\d{4})', texto_bruto)
-            if match_data:
-                try: dados_pdf['data_compra'] = datetime.strptime(match_data.group(1), '%d/%m/%Y').strftime('%Y-%m-%d')
-                except: pass
+            if m := re.search(r'Data:\s*(\d{2}/\d{2}/\d{4})', text): 
+                data_br = m.group(1)
+                try:
+                    dados_pdf['data_registro'] = datetime.strptime(data_br, '%d/%m/%Y').strftime('%Y-%m-%d')
+                except:
+                    dados_pdf['data_registro'] = None
             
-            match_emp = re.search(r'Empresa:\s*(\d+)', texto_bruto)
-            if match_emp: dados_pdf['empresa'] = match_emp.group(1)
-
-            texto_layout = page.extract_text(layout=True) or ""
+            if m := re.search(r'Empresa:\s*(\d+)', text):
+                dados_pdf['empresa'] = m.group(1)
+            
+            # 2. Captura Solicitante (Layout)
+            texto_layout = pdf.pages[0].extract_text(layout=True) or ""
             if "Requerente" in texto_layout:
                 linhas_layout = texto_layout.split('\n')
                 for i, linha in enumerate(linhas_layout):
@@ -625,21 +733,29 @@ def importar_solicitacao():
                                     break
                         break
 
-            linhas = texto_bruto.split('\n')
-            for i, linha in enumerate(linhas):
-                match_prod = re.search(r'^(\d{2}\.\d{2}\.\d{4})\s+(.+)', linha)
-                if match_prod:
-                    codigo = match_prod.group(1)
-                    resto_linha = match_prod.group(2)
+            # 3. Varredura Linha a Linha (Itens e OBSERVAÇÕES)
+            lines = text.split('\n')
+            for i, line in enumerate(lines):
+                
+                # --- NOVA LÓGICA: CAPTURA DE OBSERVAÇÃO ---
+                # Procura por "Observação:" (com dois pontos, comum nos itens)
+                if "Observação:" in line:
+                    # Pega tudo que vem depois dos dois pontos e limpa os espaços
+                    obs_texto = line.split("Observação:", 1)[1].strip()
+                    # Remove aspas ou caracteres estranhos que o PDF possa trazer
+                    obs_texto = obs_texto.replace('"', '').replace("'", "")
+                    if obs_texto:
+                        lista_obs.append(obs_texto)
+                
+                # Captura de Itens (Padrão: Código do produto seguido de descrição)
+                if m := re.search(r'^(\d{2}\.\d{2}\.\d{4})\s+(.+)', line):
+                    codigo = m.group(1)
+                    resto = m.group(2)
                     
-                    obs_texto = ""
-                    if i + 1 < len(linhas) and "Observação:" in linhas[i+1]:
-                        obs_texto = linhas[i+1].replace("Observação:", "").strip()
-
-                    tokens = resto_linha.split()
+                    tokens = resto.split()
                     qtd = "1"
                     unid = "UN"
-                    descricao_parts = []
+                    desc_parts = []
                     encontrou_unidade = False
                     
                     for token in tokens:
@@ -653,24 +769,24 @@ def importar_solicitacao():
                             elif token_upper == "PC": unid = "PCT"
                             else: unid = token_upper
                             continue 
-                        if encontrou_unidade: continue 
-                        if not re.match(r'\d+,\d+', token): descricao_parts.append(token)
+                        if encontrou_unidade:
+                            continue 
+                        if not re.match(r'\d+,\d+', token): 
+                            desc_parts.append(token)
                     
-                    desc_produto = " ".join(descricao_parts).strip()
-                    nome_item_formatado = f"{codigo} - {desc_produto}"
-                    if obs_texto: lista_obs_global.append(f"{codigo} {desc_produto} - {obs_texto}")
-                    else: lista_obs_global.append(f"{codigo} {desc_produto}")
-
-                    itens_pdf.append({'nome_item': nome_item_formatado, 'quantidade': qtd, 'unidade_medida': unid})
+                    nome_final = f"{codigo} - {' '.join(desc_parts)}"
+                    itens_pdf.append({'nome_item': nome_final, 'quantidade': qtd, 'unidade_medida': unid})
 
     except Exception as e:
         print(f"Erro PDF: {e}")
         flash('Erro ao processar PDF.')
-
-    if lista_obs_global: dados_pdf['observacao'] = "\n".join(lista_obs_global)
+    
+    # 4. Junta todas as observações encontradas e coloca no campo
+    if lista_obs:
+        # Junta com quebra de linha para ficar organizado no textarea
+        dados_pdf['observacao'] = "\n".join(lista_obs)
 
     conn = get_db_connection()
-    if not conn: return "Erro Banco"
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM empresas_compras')
     empresas = cursor.fetchall()
@@ -678,33 +794,64 @@ def importar_solicitacao():
     usuarios = cursor.fetchall()
     cursor.close()
     conn.close()
-
-    if itens_pdf: flash(f'✅ Sucesso! {len(itens_pdf)} itens carregados.')
-    else: flash('⚠️ Nenhum item encontrado no PDF.')
     
     return render_template('nova_compra.html', empresas=empresas, usuarios=usuarios, dados_form=dados_pdf, itens_preenchidos=itens_pdf)
 
 @app.route('/admin/usuarios', methods=['GET', 'POST'])
 def admin_usuarios():
-    if session.get('user_nivel') != 'admin': return redirect(url_for('dashboard'))
+    # Verifica se é admin
+    if session.get('user_nivel') != 'admin': 
+        return redirect(url_for('dashboard'))
+    
     conn = get_db_connection()
-    if not conn: return "Erro Banco"
     cursor = conn.cursor()
     
-    if request.method == 'POST': 
-        cursor.execute('UPDATE usuarios SET aprovado=1 WHERE id=%s',(request.form['user_id'],))
-        conn.commit()
+    if request.method == 'POST':
+        acao = request.form.get('acao') # aprovar, excluir, promover, rebaixar
+        target_id = request.form.get('user_id')
+        
+        # Proteção: Não permitir que o usuário exclua ou rebaixe a si mesmo
+        if str(target_id) == str(session.get('user_id')) and acao in ['excluir', 'rebaixar']:
+            flash('⚠️ Você não pode excluir ou rebaixar sua própria conta!')
+        else:
+            if acao == 'aprovar':
+                cursor.execute('UPDATE usuarios SET aprovado=1 WHERE id=%s', (target_id,))
+                flash('✅ Usuário aprovado com sucesso!')
+            
+            elif acao == 'excluir':
+                # Remove primeiro se tiver pedidos vinculados (opcional, mas seguro) ou apenas o usuário
+                # Aqui vamos excluir apenas o usuário. Se houver FKs, o banco pode reclamar dependendo da config.
+                # Para simplificar e evitar erros de integridade, vamos supor exclusão direta ou soft delete.
+                # Se der erro de FK, ideal seria desativar em vez de excluir, mas aqui segue o delete:
+                try:
+                    cursor.execute('DELETE FROM usuarios WHERE id=%s', (target_id,))
+                    flash('🗑️ Usuário excluído permanentemente.')
+                except Exception as e:
+                    flash('Erro ao excluir: Usuário possui registros vinculados.')
+
+            elif acao == 'promover':
+                cursor.execute("UPDATE usuarios SET nivel_acesso='admin' WHERE id=%s", (target_id,))
+                flash('👮 Usuário promovido a ADMIN!')
+
+            elif acao == 'rebaixar':
+                cursor.execute("UPDATE usuarios SET nivel_acesso='comprador' WHERE id=%s", (target_id,))
+                flash('⬇️ Usuário rebaixado para Comprador.')
+
+            conn.commit()
+            return redirect(url_for('admin_usuarios'))
     
+    # Busca Pendentes
     cursor.execute('SELECT * FROM usuarios WHERE aprovado=0')
     pendentes = cursor.fetchall()
+
+    # Busca Ativos (para gerenciar permissões) - Exclui o próprio usuário da lista para evitar acidentes visuais
+    cursor.execute('SELECT * FROM usuarios WHERE aprovado=1 ORDER BY nome_completo')
+    ativos = cursor.fetchall()
     
     cursor.close()
     conn.close()
-    return render_template('admin_usuarios.html', pendentes=pendentes)
-
-@app.route('/logout')
-def logout(): session.clear(); return redirect(url_for('login'))
+    
+    return render_template('admin_usuarios.html', pendentes=pendentes, ativos=ativos)
 
 if __name__ == '__main__':
-    # Para produção, use: waitress-serve --host=0.0.0.0 --port=8080 app:app
     app.run(debug=True, host='0.0.0.0', port=8080)

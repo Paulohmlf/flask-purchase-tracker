@@ -86,8 +86,8 @@
         <div>
             <h1 style="margin: 0; color: #2c3e50; font-size: 1.8rem;">📄 Pedido #{{ pedido.id }}</h1>
             
-            <p style="margin: 5px 0; color: #444;">
-                Registrado em: 
+            <p style="margin: 5px 0; color: #444; font-weight: bold;">
+                📅 Data de Abertura: 
                 {% if pedido.data_registro %}
                     {{ pedido.data_registro.strftime('%d/%m/%Y') }}
                 {% else %} - {% endif %}
@@ -185,6 +185,14 @@
         
         <div style="flex: 1; min-width: 300px;">
             <h3 style="margin-top: 0; color: #555; border-bottom: 1px solid #ccc; font-size: 1.1rem;">Dados Fiscais & Prazos</h3>
+            
+            <p style="margin: 5px 0; font-size: 0.9rem;">
+                <strong>Data de Abertura:</strong> 
+                {% if pedido.data_registro %}
+                    {{ pedido.data_registro.strftime('%d/%m/%Y') }}
+                {% else %} - {% endif %}
+            </p>
+
             <p style="margin: 5px 0; font-size: 0.9rem;"><strong>Orçamento:</strong> {{ pedido.numero_orcamento or '-' }}</p>
             <p style="margin: 5px 0; font-size: 0.9rem;"><strong>Nota Fiscal:</strong> {{ pedido.nota_fiscal or '-' }} (Série: {{ pedido.serie_nota or '-' }})</p>
             

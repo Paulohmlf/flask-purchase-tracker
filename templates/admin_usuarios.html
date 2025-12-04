@@ -1,43 +1,126 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div style="max-width: 800px; margin: 0 auto;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+<div style="max-width: 1000px; margin: 0 auto;">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
         <div>
-            <h2 style="margin-bottom: 5px; border: none;">🛡️ Área Administrativa</h2>
-            <p style="color: #666; font-size: 1.1rem;">Libere o acesso para novos usuários.</p>
+            <h1 style="margin-bottom: 5px; border: none; font-size: 2rem; color: #2c3e50; margin-top: 0;">🛡️ Gestão de Usuários</h1>
+            <p style="color: #666; font-size: 1.1rem;">Aprove novos cadastros e gerencie as permissões da equipe.</p>
         </div>
-        <a href="{{ url_for('dashboard') }}">
-            <button style="width: auto; background-color: #6c757d; margin: 0;">⬅ Voltar</button>
+        <a href="{{ url_for('dashboard') }}" style="text-decoration: none;">
+            <button style="width: auto; background-color: #6c757d; margin: 0;">⬅ Voltar ao Painel</button>
         </a>
     </div>
 
-    {% if not pendentes %}
-        <div class="card" style="text-align: center; padding: 40px;">
-            <span class="material-icons" style="font-size: 4rem; color: var(--verde-sucesso);">check_circle</span>
-            <h3>Tudo limpo!</h3>
-            <p>Não há ninguém esperando aprovação no momento.</p>
-        </div>
-    {% else %}
-        <div style="display: grid; gap: 20px;">
-            {% for user in pendentes %}
-            <div class="card" style="margin: 0; display: flex; flex-direction: column; border-left: 6px solid #f39c12;">
-                <div style="margin-bottom: 15px;">
-                    <h3 style="margin: 0; color: #333;">{{ user.nome_completo }}</h3>
-                    <p style="color: #666; margin: 5px 0; font-family: monospace; font-size: 1.1rem;">
-                        ✉ {{ user.email }}
-                    </p>
+    {% if pendentes %}
+        <div style="background-color: #fff3cd; border: 1px solid #ffeeba; padding: 20px; border-radius: 8px; margin-bottom: 40px;">
+            <h2 style="margin-top: 0; color: #856404; display: flex; align-items: center; gap: 10px;">
+                <span class="material-icons">person_add</span> Solicitações Pendentes
+            </h2>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 15px;">
+                {% for user in pendentes %}
+                <div class="card" style="margin: 0; display: flex; flex-direction: column; border-left: 6px solid #f39c12; padding: 15px;">
+                    <div style="margin-bottom: 15px;">
+                        <h3 style="margin: 0; color: #333;">{{ user.nome_completo }}</h3>
+                        <p style="color: #666; margin: 5px 0; font-family: monospace; font-size: 1rem;">✉ {{ user.email }}</p>
+                        <p style="font-size: 0.9rem; color: #888;">Aguardando desde: {{ user.data_registro or 'Hoje' }}</p>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px;">
+                        <form method="POST" style="flex: 1; margin: 0;">
+                            <input type="hidden" name="user_id" value="{{ user.id }}">
+                            <input type="hidden" name="acao" value="aprovar">
+                            <button type="submit" style="background-color: var(--verde-sucesso); margin: 0; width: 100%; padding: 10px;">
+                                ✅ Aprovar
+                            </button>
+                        </form>
+                        <form method="POST" style="flex: 1; margin: 0;" onsubmit="return confirm('Tem certeza que deseja recusar e excluir esta solicitação?');">
+                            <input type="hidden" name="user_id" value="{{ user.id }}">
+                            <input type="hidden" name="acao" value="excluir">
+                            <button type="submit" style="background-color: #c0392b; margin: 0; width: 100%; padding: 10px;">
+                                ✖ Recusar
+                            </button>
+                        </form>
+                    </div>
                 </div>
-                
-                <form method="POST" style="margin: 0;">
-                    <input type="hidden" name="user_id" value="{{ user.id }}">
-                    <button type="submit" style="background-color: var(--verde-sucesso); margin: 0; width: 100%;">
-                        ✅ Aprovar Entrada
-                    </button>
-                </form>
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
     {% endif %}
+
+    <div class="card" style="padding: 25px;">
+        <h2 style="margin-top: 0; color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 15px; margin-bottom: 20px;">
+            👥 Equipe Ativa
+        </h2>
+
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background-color: #f8f9fa; text-align: left;">
+                    <th style="padding: 12px; border-bottom: 2px solid #ddd;">Nome</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #ddd;">Email</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #ddd;">Nível</th>
+                    <th style="padding: 12px; border-bottom: 2px solid #ddd; text-align: right;">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in ativos %}
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 12px; font-weight: bold; color: #333;">
+                        {{ user.nome_completo }}
+                        {% if user.id|string == session.get('user_id')|string %}
+                            <span style="background: #e0e0e0; font-size: 0.8rem; padding: 2px 6px; border-radius: 4px; margin-left: 5px;">(Você)</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 12px; color: #555;">{{ user.email }}</td>
+                    <td style="padding: 12px;">
+                        {% if user.nivel_acesso == 'admin' %}
+                            <span style="background-color: #d1c4e9; color: #512da8; padding: 4px 8px; border-radius: 12px; font-size: 0.9rem; font-weight: bold;">
+                                🛡️ Admin
+                            </span>
+                        {% else %}
+                            <span style="background-color: #c8e6c9; color: #2e7d32; padding: 4px 8px; border-radius: 12px; font-size: 0.9rem; font-weight: bold;">
+                                👤 Comprador
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 12px; text-align: right; display: flex; gap: 5px; justify-content: flex-end;">
+                        
+                        {% if user.id|string != session.get('user_id')|string %}
+                            {% if user.nivel_acesso == 'comprador' %}
+                                <form method="POST" style="margin: 0;">
+                                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                                    <input type="hidden" name="acao" value="promover">
+                                    <button type="submit" style="background-color: #8e44ad; padding: 6px 12px; font-size: 0.9rem; margin: 0; min-height: auto; width: auto;" title="Promover a Admin">
+                                        ⬆ Virar Admin
+                                    </button>
+                                </form>
+                            {% else %}
+                                <form method="POST" style="margin: 0;">
+                                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                                    <input type="hidden" name="acao" value="rebaixar">
+                                    <button type="submit" style="background-color: #f39c12; color: black; padding: 6px 12px; font-size: 0.9rem; margin: 0; min-height: auto; width: auto;" title="Rebaixar para Comprador">
+                                        ⬇ Rebaixar
+                                    </button>
+                                </form>
+                            {% endif %}
+
+                            <form method="POST" style="margin: 0;" onsubmit="return confirm('ATENÇÃO: Tem certeza que deseja excluir o usuário {{ user.nome_completo }} permanentemente?');">
+                                <input type="hidden" name="user_id" value="{{ user.id }}">
+                                <input type="hidden" name="acao" value="excluir">
+                                <button type="submit" style="background-color: #c0392b; padding: 6px 12px; font-size: 0.9rem; margin: 0; min-height: auto; width: auto;" title="Excluir Usuário">
+                                    🗑️
+                                </button>
+                            </form>
+                        {% else %}
+                            <span style="color: #999; font-size: 0.9rem; font-style: italic;">Gerencie seu perfil no banco</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 {% endblock %}
