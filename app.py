@@ -1,6 +1,8 @@
 import os
 import math
 import json
+import logging
+from logging.handlers import RotatingFileHandler
 from io import BytesIO
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
 import pymysql
@@ -20,22 +22,45 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'chave_padrao_se_nao_achar')
 
+# --- CONFIGURAÇÃO DE LOGS (REGISTO DE ERROS) ---
+# Cria a pasta 'logs' se ela não existir
+if not os.path.exists('logs'):
+    os.makedirs('logs')
+
+# Configura o ficheiro para guardar os erros (limite de 1MB, guarda 10 backups)
+file_handler = RotatingFileHandler('logs/erros_sistema.log', maxBytes=1024 * 1024, backupCount=10, encoding='utf-8')
+file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s %(levelname)s: %(message)s [em %(pathname)s:%(lineno)d]'
+))
+file_handler.setLevel(logging.ERROR)
+
+# Anexa esta configuração à aplicação Flask
+app.logger.addHandler(file_handler)
+# -----------------------------------------------
+
 UPLOAD_FOLDER = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# 2. CONFIGURAÇÕES DO BANCO
+# 2. CONFIGURAÇÕES DA BASE DE DADOS
 DB_HOST = os.getenv('DB_HOST')
 DB_USER = os.getenv('DB_USER')
 DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_NAME = os.getenv('DB_NAME')
 DB_PORT = int(os.getenv('DB_PORT', 3306))
 
+# --- TRATAMENTO GLOBAL DE ERROS ---
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Captura qualquer erro não tratado no sistema e grava no log."""
+    app.logger.error(f"ERRO CRÍTICO NÃO TRATADO: {e}", exc_info=True)
+    return "Ocorreu um erro interno no sistema. O administrador foi notificado via log.", 500
+
 # --- FUNÇÕES AUXILIARES ---
 
 def allowed_file(filename):
-    """Verifica se a extensão do arquivo é permitida"""
+    """Verifica se a extensão do ficheiro é permitida"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_db_connection():
@@ -57,11 +82,13 @@ def get_db_connection():
         )
         return conn
     except Exception as e:
-        print(f"❌ Erro ao conectar no Banco: {e}")
+        # LOG ADICIONADO AQUI
+        app.logger.error(f"Falha ao conectar na Base de Dados: {e}")
+        print(f"❌ Erro ao conectar na Base de Dados: {e}")
         return None
 
 def salvar_anexos_multiplos(conn, pedido_id, files):
-    """Salva arquivos na pasta e registra no banco de dados"""
+    """Guarda ficheiros na pasta e regista na base de dados"""
     cursor = conn.cursor()
     for arq in files:
         if arq and allowed_file(arq.filename) and arq.filename != '':
@@ -108,7 +135,7 @@ def login():
                 session['user_nivel'] = user['nivel_acesso']
                 return redirect(url_for('dashboard'))
         else:
-            flash('Erro de conexão com o banco.')
+            flash('Erro de conexão com a base de dados.')
         
         flash('Login inválido ou pendente.')
     return render_template('login.html')
@@ -158,7 +185,7 @@ def dashboard():
 
     conn = get_db_connection()
     if not conn: 
-        return "Erro Banco"
+        return "Erro Base de Dados"
 
     busca = request.args.get('busca', '')
     f_solicitacao = request.args.get('f_solicitacao', '')
@@ -323,7 +350,7 @@ def performance():
     if 'user_id' not in session: return redirect(url_for('login'))
     
     conn = get_db_connection()
-    if not conn: return "Erro Banco"
+    if not conn: return "Erro Base de Dados"
     cursor = conn.cursor()
 
     # 1. Captura Filtros da URL
@@ -430,7 +457,7 @@ def download_performance_pdf():
     if 'user_id' not in session: return redirect(url_for('login'))
     
     conn = get_db_connection()
-    if not conn: return "Erro Banco"
+    if not conn: return "Erro Base de Dados"
     cursor = conn.cursor()
 
     # Pega os mesmos filtros da URL (passados pelo botão do HTML)
@@ -503,7 +530,7 @@ def nova_compra():
     
     conn = get_db_connection()
     if not conn:
-        return "Erro de Banco"
+        return "Erro de Base de Dados"
     cursor = conn.cursor()
     
     cursor.execute('SELECT * FROM empresas_compras')
@@ -554,7 +581,7 @@ def nova_compra():
         
         cursor.close()
         conn.close()
-        flash('✅ Pedido registrado com sucesso!')
+        flash('✅ Pedido registado com sucesso!')
         return redirect(url_for('dashboard'))
 
     cursor.close()
@@ -647,7 +674,7 @@ def editar_pedido(id):
 def excluir_pedido(id):
     if 'user_id' not in session: return redirect(url_for('login'))
     conn = get_db_connection()
-    if not conn: return "Erro Banco"
+    if not conn: return "Erro Base de Dados"
     cursor = conn.cursor()
     
     cursor.execute('SELECT nome_arquivo FROM pedidos_anexos WHERE pedido_id=%s',(id,))
@@ -718,7 +745,7 @@ def ver_pedido(id):
 @app.route('/importar_solicitacao', methods=['POST'])
 def importar_solicitacao():
     if 'arquivo_pdf' not in request.files or request.files['arquivo_pdf'].filename == '':
-        flash('Erro no arquivo.')
+        flash('Erro no ficheiro.')
         return redirect(url_for('nova_compra'))
     
     file = request.files['arquivo_pdf']
@@ -796,6 +823,8 @@ def importar_solicitacao():
                     itens_pdf.append({'nome_item': nome_final, 'quantidade': qtd, 'unidade_medida': unid})
 
     except Exception as e:
+        # LOG ADICIONADO AQUI
+        app.logger.error(f"Erro ao processar PDF de importação: {e}", exc_info=True)
         print(f"Erro PDF: {e}")
         flash('Erro ao processar PDF.')
     
@@ -836,7 +865,7 @@ def admin_usuarios():
                     cursor.execute('DELETE FROM usuarios WHERE id=%s', (target_id,))
                     flash('🗑️ Usuário excluído permanentemente.')
                 except Exception as e:
-                    flash('Erro ao excluir: Usuário possui registros vinculados.')
+                    flash('Erro ao excluir: Usuário possui registos vinculados.')
             elif acao == 'promover':
                 cursor.execute("UPDATE usuarios SET nivel_acesso='admin' WHERE id=%s", (target_id,))
                 flash('👮 Usuário promovido a ADMIN!')
