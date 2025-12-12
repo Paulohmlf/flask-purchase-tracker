@@ -15,6 +15,33 @@ import pdfplumber
 import re
 from dotenv import load_dotenv
 from xhtml2pdf import pisa 
+from werkzeug.exceptions import HTTPException
+
+# --- NOVAS IMPORTAÇÕES PARA PDF e IMAGEM ---
+from pypdf import PdfReader
+from PIL import Image
+
+# --- CONFIGURAÇÃO DO OCR (TESSERACT PORTÁTIL) ---
+HAS_OCR = False
+try:
+    import pytesseract
+    
+    # Define o caminho RELATIVO para a pasta que você já colocou no servidor
+    caminho_base = os.getcwd()
+    caminho_tesseract = os.path.join(caminho_base, 'Tesseract-OCR', 'tesseract.exe')
+    
+    # Verifica se o arquivo existe
+    if os.path.exists(caminho_tesseract):
+        pytesseract.pytesseract.tesseract_cmd = caminho_tesseract
+        HAS_OCR = True
+        print(f"✅ Tesseract Portátil encontrado em: {caminho_tesseract}")
+    else:
+        print(f"⚠️ AVISO: Tesseract não encontrado em: {caminho_tesseract}")
+        
+except ImportError:
+    print("⚠️ Biblioteca 'pytesseract' não encontrada.")
+except Exception as e:
+    print(f"⚠️ Erro ao configurar Tesseract: {e}")
 
 # 1. CARREGA AS VARIÁVEIS DE AMBIENTE
 load_dotenv()
@@ -22,21 +49,16 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'chave_padrao_se_nao_achar')
 
-# --- CONFIGURAÇÃO DE LOGS (REGISTO DE ERROS) ---
-# Cria a pasta 'logs' se ela não existir
+# --- CONFIGURAÇÃO DE LOGS ---
 if not os.path.exists('logs'):
     os.makedirs('logs')
 
-# Configura o ficheiro para guardar os erros (limite de 1MB, guarda 10 backups)
 file_handler = RotatingFileHandler('logs/erros_sistema.log', maxBytes=1024 * 1024, backupCount=10, encoding='utf-8')
 file_handler.setFormatter(logging.Formatter(
     '%(asctime)s %(levelname)s: %(message)s [em %(pathname)s:%(lineno)d]'
 ))
 file_handler.setLevel(logging.ERROR)
-
-# Anexa esta configuração à aplicação Flask
 app.logger.addHandler(file_handler)
-# -----------------------------------------------
 
 UPLOAD_FOLDER = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
@@ -50,21 +72,19 @@ DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_NAME = os.getenv('DB_NAME')
 DB_PORT = int(os.getenv('DB_PORT', 3306))
 
-# --- TRATAMENTO GLOBAL DE ERROS ---
 @app.errorhandler(Exception)
 def handle_exception(e):
-    """Captura qualquer erro não tratado no sistema e grava no log."""
+    if isinstance(e, HTTPException):
+        return e
     app.logger.error(f"ERRO CRÍTICO NÃO TRATADO: {e}", exc_info=True)
     return "Ocorreu um erro interno no sistema. O administrador foi notificado via log.", 500
 
 # --- FUNÇÕES AUXILIARES ---
 
 def allowed_file(filename):
-    """Verifica se a extensão do ficheiro é permitida"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_db_connection():
-    """Estabelece conexão com o MariaDB usando PyMySQL"""
     try:
         if not DB_HOST or not DB_USER:
             print("❌ ERRO CRÍTICO: Variáveis do .env não encontradas!")
@@ -82,13 +102,11 @@ def get_db_connection():
         )
         return conn
     except Exception as e:
-        # LOG ADICIONADO AQUI
         app.logger.error(f"Falha ao conectar na Base de Dados: {e}")
         print(f"❌ Erro ao conectar na Base de Dados: {e}")
         return None
 
 def salvar_anexos_multiplos(conn, pedido_id, files):
-    """Guarda ficheiros na pasta e regista na base de dados"""
     cursor = conn.cursor()
     for arq in files:
         if arq and allowed_file(arq.filename) and arq.filename != '':
@@ -104,7 +122,6 @@ def salvar_anexos_multiplos(conn, pedido_id, files):
     cursor.close()
 
 def safe_float(valor_str):
-    """Converte string de moeda para float de forma segura"""
     if not valor_str: 
         return 0.0
     try:
@@ -116,6 +133,7 @@ def safe_float(valor_str):
 # --- ROTAS DE AUTENTICAÇÃO ---
 
 @app.route('/', methods=['GET', 'POST'])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         email = request.form['email']
@@ -344,7 +362,7 @@ def dashboard():
                            graf_comp={'labels': [r['nome_completo'] or 'Sem' for r in dados_comp], 'values': [r['qtd'] for r in dados_comp]},
                            graf_timeline={'labels': [d.strftime('%d/%m') for d in sorted_dates], 'values': [timeline_data[d] for d in sorted_dates]})
 
-# --- ROTA DE PERFORMANCE (COM FILTROS) ---
+# --- ROTA DE PERFORMANCE ---
 @app.route('/performance')
 def performance():
     if 'user_id' not in session: return redirect(url_for('login'))
@@ -353,11 +371,9 @@ def performance():
     if not conn: return "Erro Base de Dados"
     cursor = conn.cursor()
 
-    # 1. Captura Filtros da URL
     f_inicio = request.args.get('inicio', '')
     f_fim = request.args.get('fim', '')
     
-    # 2. Monta a cláusula WHERE dinamicamente (baseada em data_registro)
     where_base = ""
     params = []
     
@@ -371,7 +387,6 @@ def performance():
         where_base = " AND data_registro <= %s"
         params = [f_fim]
 
-    # --- KPI 1: Lead Time ---
     cursor.execute(f"""
         SELECT AVG(DATEDIFF(data_entrega_real, data_registro)) as media 
         FROM acompanhamento_compras 
@@ -380,7 +395,6 @@ def performance():
     res_lead = cursor.fetchone()
     lead_time = round(res_lead['media'] or 0)
 
-    # --- KPI 2: OTIF (Qualidade) ---
     cursor.execute(f"""
         SELECT 
             COUNT(*) as total,
@@ -398,7 +412,6 @@ def performance():
     nao_avaliados = total_entregue - perfeitas - problemas
     if nao_avaliados < 0: nao_avaliados = 0
 
-    # --- KPI 3: Backlog (Financeiro em Aberto) ---
     cursor.execute(f"""
         SELECT SUM(i.quantidade * i.valor_unitario) as total_money
         FROM pedidos_itens i
@@ -409,7 +422,6 @@ def performance():
     backlog_val = res_backlog['total_money'] or 0.0
     backlog_fmt = "{:,.2f}".format(backlog_val).replace(',', 'X').replace('.', ',').replace('X', '.')
 
-    # --- Gráfico 1: Atraso por Unidade ---
     cursor.execute(f"""
         SELECT 
             e.nome_empresa,
@@ -431,7 +443,6 @@ def performance():
         labels_atraso.append(u['nome_empresa'])
         values_atraso.append(round(taxa, 1))
 
-    # --- Falhas Recentes (Tabela) ---
     cursor.execute(f"""
         SELECT id, fornecedor, data_entrega_real, detalhes_entrega 
         FROM acompanhamento_compras 
@@ -451,22 +462,17 @@ def performance():
                            filtro_inicio=f_inicio, 
                            filtro_fim=f_fim)
 
-# --- ROTA PDF (COM FILTROS E NOVO TEMPLATE) ---
 @app.route('/download_performance_pdf')
 def download_performance_pdf():
     if 'user_id' not in session: return redirect(url_for('login'))
-    
     conn = get_db_connection()
     if not conn: return "Erro Base de Dados"
     cursor = conn.cursor()
 
-    # Pega os mesmos filtros da URL (passados pelo botão do HTML)
     f_inicio = request.args.get('inicio', '')
     f_fim = request.args.get('fim', '')
-    
     where_base = ""
     params = []
-    
     if f_inicio and f_fim:
         where_base = " AND data_registro BETWEEN %s AND %s"
         params = [f_inicio, f_fim]
@@ -477,7 +483,6 @@ def download_performance_pdf():
         where_base = " AND data_registro <= %s"
         params = [f_fim]
 
-    # Recalcula tudo com o filtro para o PDF
     cursor.execute(f"SELECT AVG(DATEDIFF(data_entrega_real, data_registro)) as lead_time FROM acompanhamento_compras WHERE data_entrega_real IS NOT NULL {where_base}", params)
     res_lead = cursor.fetchone()
     lead_time = round(res_lead['lead_time'] or 0)
@@ -488,7 +493,6 @@ def download_performance_pdf():
     perfeitas = d_otif['perfeitas'] if d_otif and d_otif['perfeitas'] else 0
     otif = round((perfeitas / total_otif * 100), 1) if total_otif > 0 else 0
 
-    # Listas detalhadas para o PDF
     cursor.execute(f"""
         SELECT c.id, e.nome_empresa, c.fornecedor, c.data_compra, c.prazo_entrega, c.data_entrega_real, c.entrega_conforme, c.detalhes_entrega,
         (SELECT COALESCE(SUM(i.quantidade * i.valor_unitario), 0) FROM pedidos_itens i WHERE i.pedido_id = c.id) as valor_total
@@ -520,6 +524,174 @@ def download_performance_pdf():
     nome_arquivo = f"Relatorio_Performance_{f_inicio}_ate_{f_fim}.pdf" if f_inicio else f"Relatorio_Geral_{date.today()}.pdf"
     
     return send_file(pdf_io, download_name=nome_arquivo, as_attachment=True)
+
+# --- FUNÇÃO PRINCIPAL DE IMPORTAÇÃO (HÍBRIDA + TESSERACT PORTÁTIL) ---
+@app.route('/importar_solicitacao', methods=['POST'])
+def importar_solicitacao():
+    if 'arquivo_pdf' not in request.files or request.files['arquivo_pdf'].filename == '':
+        flash('Erro no ficheiro.')
+        return redirect(url_for('nova_compra'))
+    
+    file = request.files['arquivo_pdf']
+    
+    # Lê ficheiro para memória (para poder ser lido 2 vezes)
+    file_bytes = file.read()
+    
+    # 1. TENTATIVA RÁPIDA: Texto direto via pdfplumber
+    file_obj_plumber = BytesIO(file_bytes)
+    text = ""
+    layout_text = ""
+    origem = "Texto Digital (Rápido)"
+    
+    try:
+        with pdfplumber.open(file_obj_plumber) as pdf:
+            if len(pdf.pages) > 0:
+                page = pdf.pages[0]
+                text = page.extract_text() or ""
+                layout_text = page.extract_text(layout=True) or ""
+    except Exception as e:
+        app.logger.error(f"Erro pdfplumber: {e}")
+
+    # 2. TENTATIVA OCR: Se não achou texto (menos de 10 caracteres), usa Tesseract
+    if len(text.strip()) < 10:
+        if HAS_OCR:
+            app.logger.warning("⚠️ Texto vazio. Ativando Tesseract Portátil...")
+            try:
+                file_obj_ocr = BytesIO(file_bytes)
+                leitor_pdf = PdfReader(file_obj_ocr)
+                
+                if len(leitor_pdf.pages) > 0:
+                    pagina = leitor_pdf.pages[0]
+                    # Extrai imagens de dentro do PDF
+                    if len(pagina.images) > 0:
+                        full_ocr_text = ""
+                        for imagem_obj in pagina.images:
+                            imagem_pil = Image.open(BytesIO(imagem_obj.data))
+                            # Leitura com Tesseract
+                            full_ocr_text += pytesseract.image_to_string(imagem_pil, lang='por') + "\n"
+                        
+                        text = full_ocr_text
+                        layout_text = full_ocr_text # OCR não tem layout perfeito, mas serve
+                        origem = "Tesseract Portátil (Imagem)"
+                    else:
+                        app.logger.warning("PDF sem texto e sem imagens extraíveis.")
+            except Exception as e_ocr:
+                app.logger.error(f"Erro no Tesseract: {e_ocr}")
+        else:
+            app.logger.warning("OCR não disponível (Pasta Tesseract-OCR não encontrada).")
+
+    # --- 3. PROCESSAMENTO INTELIGENTE (REGEX ATUALIZADA) ---
+    dados_pdf = {}
+    itens_pdf = []
+    lista_obs = [] 
+    # ADICIONADO: "MT" e "MT GERAL" na lista de unidades conhecidas
+    unidades_conhecidas = ['UN', 'PC', 'CX', 'KG', 'M', 'L', 'LITRO', 'METRO', 'PAR', 'UN GERAL', 'MT', 'MT GERAL']
+
+    # Se ainda não tiver texto, não tem o que fazer
+    if not text:
+        flash('Erro: PDF vazio ou ilegível.')
+        return redirect(url_for('nova_compra'))
+
+    # A) Extração de Metadados
+    if m := re.search(r'Solicitação de Compra:\s*(\d+)', text):
+        dados_pdf['solicitacao'] = m.group(1)
+    
+    if m := re.search(r'Data:\s*(\d{2}/\d{2}/\d{4})', text): 
+        try:
+            dados_pdf['data_registro'] = datetime.strptime(m.group(1), '%d/%m/%Y').strftime('%Y-%m-%d')
+        except: pass
+    
+    if m := re.search(r'Empresa:\s*(\d+)', text):
+        dados_pdf['empresa'] = m.group(1)
+    
+    # B) Extração do Requerente (Via Layout - Só funciona bem no modo digital)
+    if "Requerente" in layout_text:
+        linhas_layout = layout_text.split('\n')
+        for i, linha in enumerate(linhas_layout):
+            if "Requerente" in linha:
+                for offset in range(1, 4):
+                    if i + offset < len(linhas_layout):
+                        linha_alvo = linhas_layout[i+offset].strip()
+                        if linha_alvo: 
+                            partes = re.split(r'\s{2,}', linha_alvo)
+                            dados_pdf['solicitante_real'] = partes[0]
+                            break
+                break
+
+    # C) Extração de Observações e Itens
+    lines = text.split('\n')
+    for line in lines:
+        # Observação
+        if "Observação:" in line:
+            try:
+                obs_texto = line.split("Observação:", 1)[1].strip()
+                obs_texto = obs_texto.replace('"', '').replace("'", "")
+                if obs_texto:
+                    lista_obs.append(obs_texto)
+            except: pass
+    
+        # Itens (Padrão: 00.00.0000 Descrição...)
+        if m := re.search(r'^(\d{2}\.\d{2}\.\d{4})\s+(.+)', line):
+            codigo = m.group(1)
+            resto = m.group(2)
+            
+            tokens = resto.split()
+            qtd = "1"
+            unid = "UN"
+            desc_parts = []
+            encontrou_unidade = False
+            
+            for token in tokens:
+                token_upper = token.upper()
+                
+                # CORREÇÃO CRUCIAL: Aceita ponto no meio (1.500,00)
+                if re.match(r'^[\d\.]+,\d+$', token):
+                    # Limpa o ponto de milhar antes de salvar
+                    qtd = token.split(',')[0].replace('.', '')
+                    break 
+                
+                # Se for unidade conhecida
+                elif token_upper in unidades_conhecidas or (token_upper == 'UN' and 'UN' in token_upper):
+                    encontrou_unidade = True
+                    if "UN" in token_upper: unid = "UN"
+                    elif token_upper == "PC": unid = "PCT"
+                    elif "MT" in token_upper: unid = "M" # Converte MT para M
+                    else: unid = token_upper
+                    continue 
+                
+                if encontrou_unidade: continue 
+                
+                # Se não for saldo numérico (com vírgula), é parte do nome
+                if not re.match(r'\d+,\d+', token): 
+                    desc_parts.append(token)
+            
+            nome_final = f"{codigo} - {' '.join(desc_parts)}"
+            itens_pdf.append({'nome_item': nome_final, 'quantidade': qtd, 'unidade_medida': unid})
+
+    if lista_obs:
+        dados_pdf['observacao'] = "\n".join(lista_obs)
+
+    if itens_pdf:
+        flash(f'✅ Sucesso! {len(itens_pdf)} itens importados via {origem}.')
+    else:
+        flash('⚠️ PDF processado, mas nenhum item identificado no padrão.')
+
+    # Carrega dados para o formulário
+    conn = get_db_connection()
+    empresas = []
+    usuarios = []
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM empresas_compras')
+            empresas = cursor.fetchall()
+            cursor.execute('SELECT * FROM usuarios WHERE aprovado = 1')
+            usuarios = cursor.fetchall()
+            cursor.close()
+            conn.close()
+        except: pass
+    
+    return render_template('nova_compra.html', empresas=empresas, usuarios=usuarios, dados_form=dados_pdf, itens_preenchidos=itens_pdf)
 
 # --- ROTAS DE CADASTRO E EDIÇÃO ---
 
@@ -741,106 +913,6 @@ def ver_pedido(id):
     conn.close()
     
     return render_template('ver_pedido.html', pedido=pedido, itens=itens, anexos=anexos)
-
-@app.route('/importar_solicitacao', methods=['POST'])
-def importar_solicitacao():
-    if 'arquivo_pdf' not in request.files or request.files['arquivo_pdf'].filename == '':
-        flash('Erro no ficheiro.')
-        return redirect(url_for('nova_compra'))
-    
-    file = request.files['arquivo_pdf']
-    dados_pdf = {}
-    itens_pdf = []
-    lista_obs = [] 
-    unidades_conhecidas = ['UN', 'PC', 'CX', 'KG', 'M', 'L', 'LITRO', 'METRO', 'PAR', 'UN GERAL']
-
-    try:
-        with pdfplumber.open(file) as pdf:
-            text = pdf.pages[0].extract_text() or ""
-            
-            if m := re.search(r'Solicitação de Compra:\s*(\d+)', text):
-                dados_pdf['solicitacao'] = m.group(1)
-            
-            if m := re.search(r'Data:\s*(\d{2}/\d{2}/\d{4})', text): 
-                data_br = m.group(1)
-                try:
-                    dados_pdf['data_registro'] = datetime.strptime(data_br, '%d/%m/%Y').strftime('%Y-%m-%d')
-                except:
-                    dados_pdf['data_registro'] = None
-            
-            if m := re.search(r'Empresa:\s*(\d+)', text):
-                dados_pdf['empresa'] = m.group(1)
-            
-            texto_layout = pdf.pages[0].extract_text(layout=True) or ""
-            if "Requerente" in texto_layout:
-                linhas_layout = texto_layout.split('\n')
-                for i, linha in enumerate(linhas_layout):
-                    if "Requerente" in linha:
-                        for offset in range(1, 4):
-                            if i + offset < len(linhas_layout):
-                                linha_alvo = linhas_layout[i+offset].strip()
-                                if linha_alvo: 
-                                    partes = re.split(r'\s{2,}', linha_alvo)
-                                    dados_pdf['solicitante_real'] = partes[0]
-                                    break
-                        break
-
-            lines = text.split('\n')
-            for i, line in enumerate(lines):
-                if "Observação:" in line:
-                    obs_texto = line.split("Observação:", 1)[1].strip()
-                    obs_texto = obs_texto.replace('"', '').replace("'", "")
-                    if obs_texto:
-                        lista_obs.append(obs_texto)
-                
-                if m := re.search(r'^(\d{2}\.\d{2}\.\d{4})\s+(.+)', line):
-                    codigo = m.group(1)
-                    resto = m.group(2)
-                    
-                    tokens = resto.split()
-                    qtd = "1"
-                    unid = "UN"
-                    desc_parts = []
-                    encontrou_unidade = False
-                    
-                    for token in tokens:
-                        token_upper = token.upper()
-                        if re.match(r'^\d+,\d+$', token):
-                            qtd = token.split(',')[0]
-                            break 
-                        elif token_upper in unidades_conhecidas or (token_upper == 'UN' and 'UN' in token_upper):
-                            encontrou_unidade = True
-                            if "UN" in token_upper: unid = "UN"
-                            elif token_upper == "PC": unid = "PCT"
-                            else: unid = token_upper
-                            continue 
-                        if encontrou_unidade:
-                            continue 
-                        if not re.match(r'\d+,\d+', token): 
-                            desc_parts.append(token)
-                    
-                    nome_final = f"{codigo} - {' '.join(desc_parts)}"
-                    itens_pdf.append({'nome_item': nome_final, 'quantidade': qtd, 'unidade_medida': unid})
-
-    except Exception as e:
-        # LOG ADICIONADO AQUI
-        app.logger.error(f"Erro ao processar PDF de importação: {e}", exc_info=True)
-        print(f"Erro PDF: {e}")
-        flash('Erro ao processar PDF.')
-    
-    if lista_obs:
-        dados_pdf['observacao'] = "\n".join(lista_obs)
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM empresas_compras')
-    empresas = cursor.fetchall()
-    cursor.execute('SELECT * FROM usuarios WHERE aprovado = 1')
-    usuarios = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    
-    return render_template('nova_compra.html', empresas=empresas, usuarios=usuarios, dados_form=dados_pdf, itens_preenchidos=itens_pdf)
 
 @app.route('/admin/usuarios', methods=['GET', 'POST'])
 def admin_usuarios():

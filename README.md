@@ -45,7 +45,7 @@ A tela principal exibe KPIs gerenciais e visuais para acompanhamento:
 
   * **Back-end:** Python 3.x
   * **Framework:** Flask
-  * **Banco de Dados:** SQLite3 (armazenamento local via `database.db`)
+  * **Banco de Dados:** MariaDB
   * **Front-end:** HTML5, CSS3 (Acessível), JavaScript
   * **Visualização de Dados:** Chart.js (para geração dos gráficos)
 
